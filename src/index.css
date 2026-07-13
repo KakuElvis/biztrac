@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  background: #f4f8ff;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(245, 166, 35, 0.16), transparent 30rem),
+    linear-gradient(180deg, #ffffff 0%, #f4f8ff 100%);
+  color: #022864;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@layer components {
+  .screen-pad {
+    @apply px-4 sm:px-6 lg:px-8;
+  }
+
+  .panel {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-soft;
+  }
+
+  .field {
+    @apply h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-ink outline-none transition focus:border-palm focus:ring-4 focus:ring-palm/10;
+  }
+
+  .label {
+    @apply text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+
+  .icon-button {
+    @apply inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:border-palm/40 hover:text-palm focus:outline-none focus:ring-4 focus:ring-palm/10;
+  }
+}

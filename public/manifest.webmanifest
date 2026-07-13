@@ -1,0 +1,17 @@
+{
+  "name": "BizTrac",
+  "short_name": "BizTrac",
+  "description": "Mobile-first business management for Ghanaian SMEs.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F4F8FF",
+  "theme_color": "#027AEC",
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
