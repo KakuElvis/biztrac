@@ -10,6 +10,7 @@ import {
   ShoppingCart,
   WalletCards,
 } from "lucide-react";
+import { AppLogo } from "../../components/common/AppLogo.jsx";
 import { classNames } from "../../lib/formatters.js";
 
 const navItems = [
@@ -121,15 +122,12 @@ export function AppShell({
 
 function Brand() {
   return (
-    <div className="flex items-center gap-3">
-      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-palm text-sm font-black text-white">
-        BT
-      </div>
-      <div>
-        <p className="text-lg font-black text-ink">BizTrac</p>
-        <p className="text-xs font-semibold text-slate-500">SME control centre</p>
-      </div>
-    </div>
+    <AppLogo
+      imageClassName="h-14 w-14 rounded-2xl border-2 border-ink/50 object-cover lg:h-13 lg:w-13"
+      titleClassName="text-lg font-black text-ink"
+      subtitleClassName="text-xs font-semibold text-slate-500"
+      subtitle="Manage Today. Grow Tomorrow."
+    />
   );
 }
 

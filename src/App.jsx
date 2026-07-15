@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { AppLogo } from "./components/common/AppLogo.jsx";
 import { AppShell } from "./components/layout/AppShell.jsx";
 import { AuthScreen, PasswordRecoveryScreen } from "./features/auth/AuthScreen.jsx";
 import { Dashboard } from "./features/dashboard/Dashboard.jsx";
@@ -662,10 +662,15 @@ export default function App() {
 
   if (isLoading || (session && workspaceLoading)) {
     return (
-      <main className="grid min-h-screen place-items-center">
-        <div className="flex items-center gap-3 text-sm font-bold text-palm">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          {isLoading ? "Opening BizTrac" : "Loading your workspace"}
+      <main className="grid min-h-screen place-items-center bg-slate-50 px-4">
+        <div className="flex flex-col items-center gap-4 rounded-[1.75rem] border border-slate-200 bg-white px-8 py-8 shadow-soft">
+          <AppLogo
+            showText={false}
+            imageClassName="h-16 w-16 rounded-3xl object-cover shadow-lg shadow-palm/20"
+          />
+          <p className="text-sm font-bold text-palm">
+            {isLoading ? "Opening BizTrac" : "Loading your workspace"}
+          </p>
         </div>
       </main>
     );

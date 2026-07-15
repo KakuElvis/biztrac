@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Button } from "../../components/common/Button.jsx";
 import { Badge } from "../../components/common/Badge.jsx";
+import { AppLogo } from "../../components/common/AppLogo.jsx";
 import { isSupabaseConfigured } from "../../lib/supabase.js";
 import {
   sendPasswordReset,
@@ -28,20 +29,18 @@ export function AuthScreen({ onDemo }) {
     <main className="screen-pad grid min-h-screen place-items-center py-6">
       <section className="grid w-full max-w-6xl overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-soft lg:grid-cols-[0.85fr_1.15fr]">
         <div className="bg-ink p-6 text-white sm:p-8">
-          <div className="flex items-center gap-3">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-palm text-sm font-black">
-              BT
-            </div>
-            <div>
-              <p className="text-2xl font-black">BizTrac</p>
-              <p className="text-sm text-white/65">Built for Ghanaian SMEs</p>
-            </div>
-          </div>
+          <AppLogo
+            containerClassName=""
+            imageClassName="h-20 w-20  bg-white rounded-2xl object-cover ring-2 ring-white/20 sm:h-16 sm:w-16"
+            titleClassName="text-2xl font-black text-white"
+            subtitleClassName="text-sm text-white/65"
+            subtitle="Manage Today. Grow Tomorrow."
+          />
 
           <div className="mt-10 space-y-5">
-            <Badge variant="amber" className="ring-0">
+            {/* <Badge variant="amber" className="ring-0">
               Retail and boutique MVP
-            </Badge>
+            </Badge> */}
             <h1 className="max-w-md text-3xl font-black leading-tight sm:text-4xl">
               Run sales, stock, expenses, and reports from one pocket-sized system.
             </h1>
@@ -129,8 +128,12 @@ export function PasswordRecoveryScreen({ onComplete }) {
         className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-soft sm:p-8"
         onSubmit={handleSubmit}
       >
-        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-palm text-sm font-black text-white">
-          BT
+        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white p-1 shadow-sm ring-1 ring-slate-100">
+          <img
+            src={new URL("../../assets/biztrac symbol.png", import.meta.url).href}
+            alt="BizTrac logo"
+            className="h-full w-full rounded-[0.85rem] object-cover"
+          />
         </div>
         <p className="label mt-6">Account security</p>
         <h1 className="mt-2 text-2xl font-black text-ink">Choose a new password</h1>
