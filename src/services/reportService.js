@@ -19,35 +19,75 @@ function getDateKey(date) {
   ).padStart(2, "0")}`;
 }
 
-function getLastSevenDays() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - 6);
+function createSeries(startDate, endDate) {
+  const days = [];
+  const current = new Date(startDate);
 
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + index);
-
-    return {
+  while (current < endDate) {
+    const date = new Date(current);
+    days.push({
       key: getDateKey(date),
-      day: new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(date),
+      day: new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric",
+      }).format(date),
       date,
       sales: 0,
       expenses: 0,
-    };
-  });
+    });
+    current.setDate(current.getDate() + 1);
+  }
+
+  return days;
 }
 
-function getWeekBounds(days) {
-  const start = new Date(days[0].date);
-  const end = new Date(days[days.length - 1].date);
+function dateKeyForDate(date) {
+  const nextDay = new Date(date);
+  nextDay.setHours(0, 0, 0, 0);
+  return getDateKey(nextDay);
+}
+
+function getDateRangeBounds(range, startDate, endDate) {
+  const now = new Date();
+  const end = new Date();
+  end.setHours(0, 0, 0, 0);
   end.setDate(end.getDate() + 1);
 
+  let start;
+  if (range === "monthly") {
+    start = new Date(end);
+    start.setDate(1);
+  } else if (range === "yearly") {
+    start = new Date(end);
+    start.setMonth(0, 1);
+  } else if (range === "custom" && startDate && endDate) {
+    start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+
+    const endInclusive = new Date(endDate);
+    endInclusive.setHours(0, 0, 0, 0);
+    endInclusive.setDate(endInclusive.getDate() + 1);
+    end.setTime(endInclusive.getTime());
+  } else {
+    start = new Date(end);
+    start.setDate(start.getDate() - 6);
+  }
+
+  if (start > end) {
+    start = new Date(end);
+    start.setDate(end.getDate() - 6);
+  }
+
+  const days = createSeries(start, end);
+  const lastDay = new Date(end);
+  lastDay.setDate(lastDay.getDate() - 1);
+
   return {
-    startIso: start.toISOString(),
-    endIso: end.toISOString(),
+    start,
+    end,
+    seriesDays: days,
     startDateKey: getDateKey(start),
-    endDateKey: getDateKey(days[days.length - 1].date),
+    endDateKey: getDateKey(lastDay),
   };
 }
 
@@ -110,6 +150,15 @@ function summarizeBestSellers(items) {
     .slice(0, 3);
 }
 
+function getLastSevenDays() {
+  const end = new Date();
+  end.setHours(0, 0, 0, 0);
+  end.setDate(end.getDate() + 1);
+  const start = new Date(end);
+  start.setDate(start.getDate() - 7);
+  return createSeries(start, end);
+}
+
 export const emptyReportSummary = {
   series: getLastSevenDays().map(({ day, sales, expenses }) => ({ day, sales, expenses })),
   salesTotal: 0,
@@ -143,21 +192,24 @@ export function getDemoReportSummary(products = []) {
   };
 }
 
-export async function getReportSummary(businessId) {
+export async function getReportSummary(businessId, { range = "weekly", startDate, endDate } = {}) {
   const client = requireSupabase();
-  const days = getLastSevenDays();
-  const seriesByDate = new Map(
-    days.map(({ key, day, sales, expenses }) => [key, { day, sales, expenses }])
+  const { start, end, seriesDays, startDateKey, endDateKey } = getDateRangeBounds(
+    range,
+    startDate,
+    endDate
   );
-  const { startIso, endIso, startDateKey, endDateKey } = getWeekBounds(days);
+  const seriesByDate = new Map(
+    seriesDays.map(({ key, day, sales, expenses }) => [key, { day, sales, expenses }])
+  );
 
   const [salesResult, expensesResult, debtorSalesResult] = await Promise.all([
     client
       .from("sales")
       .select("id, reference, customer_id, total, amount_paid, sold_at")
       .eq("business_id", businessId)
-      .gte("sold_at", startIso)
-      .lt("sold_at", endIso),
+      .gte("sold_at", start.toISOString())
+      .lt("sold_at", end.toISOString()),
     client
       .from("expenses")
       .select("amount, incurred_on")
@@ -206,6 +258,9 @@ export async function getReportSummary(businessId) {
   const expenseTotal = series.reduce((sum, point) => sum + point.expenses, 0);
 
   return {
+    period: range,
+    startDate: getDateKey(start),
+    endDate: getDateKey(new Date(end.getTime() - 1)),
     series,
     salesTotal,
     expenseTotal,

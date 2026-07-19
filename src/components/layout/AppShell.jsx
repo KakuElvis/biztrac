@@ -25,6 +25,7 @@ export function AppShell({
   children,
   activeScreen,
   business,
+  isOnline,
   onNavigate,
   lowStockCount,
   onSignOut,
@@ -73,7 +74,19 @@ export function AppShell({
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-black text-ink">{business.name}</p>
-                  <p className="truncate text-xs font-medium text-slate-500">{business.location}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-xs font-medium text-slate-500">{business.location}</p>
+                    <span
+                      className={
+                        "inline-flex items-center rounded-full px-2.5 py-1 text-[0.45rem] font-semibold uppercase tracking-[0.08em] " +
+                        (isOnline
+                          ? "bg-emerald-100 text-emerald-900"
+                          : "bg-amber-100 text-amber-900")
+                      }
+                    >
+                      {isOnline ? "Online" : "Offline"}
+                    </span>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -90,6 +103,12 @@ export function AppShell({
               </div>
             </div>
           </header>
+
+          {!isOnline ? (
+            <div className="screen-pad mx-auto max-w-5xl rounded-3xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 shadow-sm sm:mb-4">
+              You are offline. Core app pages are available, but new data may not sync until you reconnect.
+            </div>
+          ) : null}
 
           <div className="screen-pad mx-auto max-w-5xl py-5 sm:py-7">{children}</div>
         </main>

@@ -95,6 +95,11 @@ export default function App() {
   const [reportSummary, setReportSummary] = useState(emptyReportSummary);
   const [reportsLoading, setReportsLoading] = useState(false);
   const [reportsError, setReportsError] = useState("");
+  const [reportRange, setReportRange] = useState("weekly");
+  const [reportStartDate, setReportStartDate] = useState("");
+  const [reportEndDate, setReportEndDate] = useState("");
+  const [reportRefreshKey, setReportRefreshKey] = useState(0);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
 
   useEffect(() => {
     let isMounted = true;
@@ -118,6 +123,21 @@ export default function App() {
     return () => {
       isMounted = false;
       unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
     };
   }, []);
 
@@ -367,7 +387,11 @@ export default function App() {
     setReportsLoading(true);
     setReportsError("");
 
-    getReportSummary(businessId)
+    getReportSummary(businessId, {
+      range: reportRange,
+      startDate: reportStartDate || undefined,
+      endDate: reportEndDate || undefined,
+    })
       .then((nextSummary) => {
         if (isMounted) setReportSummary(nextSummary);
       })
@@ -385,7 +409,7 @@ export default function App() {
     return () => {
       isMounted = false;
     };
-  }, [isDemo, products, workspace?.business?.id]);
+  }, [isDemo, products, workspace?.business?.id, reportRange, reportStartDate, reportEndDate, reportRefreshKey]);
 
   const Screen = screens[activeScreen] ?? Dashboard;
   const lowStockCount = useMemo(
@@ -689,6 +713,7 @@ export default function App() {
       activeScreen={activeScreen}
       business={business}
       lowStockCount={lowStockCount}
+      isOnline={isOnline}
       onNavigate={setActiveScreen}
       onSignOut={handleSignOut}
     >
@@ -718,6 +743,13 @@ export default function App() {
         productsError={productsError}
         productsLoading={productsLoading}
         reportSummary={reportSummary}
+        reportRange={reportRange}
+        reportStartDate={reportStartDate}
+        reportEndDate={reportEndDate}
+        onReportRangeChange={setReportRange}
+        onReportStartDateChange={setReportStartDate}
+        onReportEndDateChange={setReportEndDate}
+        onRefreshReport={() => setReportRefreshKey((value) => value + 1)}
         reportsError={reportsError}
         reportsLoading={reportsLoading}
         setProducts={setProducts}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   AlertCircle,
   ArrowRight,
@@ -87,7 +87,7 @@ export function AuthScreen({ onDemo }) {
           </div>
 
           {mode === "register" ? (
-            <RegisterForm onDemo={onDemo} />
+            <RegisterForm onDemo={onDemo} onSuccess={() => setMode("login")} />
           ) : (
             <LoginForm onDemo={onDemo} />
           )}
@@ -166,9 +166,19 @@ export function PasswordRecoveryScreen({ onComplete }) {
   );
 }
 
-function RegisterForm({ onDemo }) {
+function RegisterForm({ onDemo, onSuccess }) {
   const [isLoading, setIsLoading] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  useEffect(() => {
+    if (!showSuccessModal) return undefined;
+    const t = setTimeout(() => {
+      setShowSuccessModal(false);
+      if (onSuccess) onSuccess();
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [showSuccessModal, onSuccess]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -189,6 +199,7 @@ function RegisterForm({ onDemo }) {
           type: "success",
           text: "Account created. Check your email to confirm your address, then log in.",
         });
+        setShowSuccessModal(true);
         form.reset();
       }
     } catch (error) {
@@ -199,6 +210,7 @@ function RegisterForm({ onDemo }) {
   }
 
   return (
+    <>
     <form className="mt-7" onSubmit={handleSubmit}>
       <div>
         <p className="label">Business account</p>
@@ -210,7 +222,9 @@ function RegisterForm({ onDemo }) {
           Live accounts are unavailable until Supabase environment keys are added.
         </StatusMessage>
       ) : null}
-      {notice ? <StatusMessage type={notice.type}>{notice.text}</StatusMessage> : null}
+      {notice && notice.type !== "success" ? (
+        <StatusMessage type={notice.type}>{notice.text}</StatusMessage>
+      ) : null}
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Field
@@ -299,6 +313,33 @@ function RegisterForm({ onDemo }) {
         </Button>
       </div>
     </form>
+      {showSuccessModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="mx-4 max-w-md rounded-2xl bg-white p-6 shadow-lg">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="mt-0.5 h-6 w-6 text-success" />
+              <div>
+                <h3 className="text-lg font-bold text-ink">Account created</h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  Check your email to confirm your address, then log in.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <Button
+                type="button"
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  if (onSuccess) onSuccess();
+                }}
+              >
+                OK
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 

@@ -36,6 +36,18 @@ function LoadingState({ children }) {
   );
 }
 
+function greetingForHour(hour) {
+  if (hour >= 18 || hour < 5) {
+    return "Good evening";
+  }
+
+  if (hour >= 12) {
+    return "Good afternoon";
+  }
+
+  return "Good morning";
+}
+
 export function Dashboard({
   business,
   dashboardError,
@@ -47,6 +59,7 @@ export function Dashboard({
 }) {
   const summary = dashboardSummary || emptyDashboardSummary;
   const ownerName = business?.owner || "there";
+  const greeting = greetingForHour(new Date().getHours());
   const totalStockValue = products.reduce(
     (total, product) => total + product.costPrice * product.quantity,
     0
@@ -57,7 +70,7 @@ export function Dashboard({
     <div className="space-y-6">
       <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-bold text-palm">Good morning, {ownerName}</p>
+          <p className="text-sm font-bold text-palm">{greeting}, {ownerName}</p>
           <h1 className="mt-1 text-3xl font-black tracking-normal text-ink">Today at a glance</h1>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex">
