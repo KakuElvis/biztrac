@@ -78,7 +78,7 @@ export function AppShell({
                     <p className="truncate text-xs font-medium text-slate-500">{business.location}</p>
                     <span
                       className={
-                        "inline-flex items-center rounded-full px-2.5 py-1 text-[0.45rem] font-semibold uppercase tracking-[0.08em] " +
+                        "inline-flex items-center rounded-full px-2 py-1 text-[0.45rem] font-semibold uppercase tracking-[0.08em] " +
                         (isOnline
                           ? "bg-emerald-100 text-emerald-900"
                           : "bg-amber-100 text-amber-900")

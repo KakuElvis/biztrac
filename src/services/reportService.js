@@ -14,73 +14,66 @@ function toNumber(value) {
 }
 
 function getDateKey(date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate()
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    date.getUTCDate()
   ).padStart(2, "0")}`;
 }
 
 function createSeries(startDate, endDate) {
   const days = [];
-  const current = new Date(startDate);
+  const current = new Date(startDate.getTime());
 
   while (current < endDate) {
-    const date = new Date(current);
+    const date = new Date(current.getTime());
     days.push({
       key: getDateKey(date),
       day: new Intl.DateTimeFormat(undefined, {
         month: "short",
         day: "numeric",
+        timeZone: "UTC",
       }).format(date),
       date,
       sales: 0,
       expenses: 0,
     });
-    current.setDate(current.getDate() + 1);
+    current.setUTCDate(current.getUTCDate() + 1);
   }
 
   return days;
 }
-
-function dateKeyForDate(date) {
-  const nextDay = new Date(date);
-  nextDay.setHours(0, 0, 0, 0);
-  return getDateKey(nextDay);
-}
-
 function getDateRangeBounds(range, startDate, endDate) {
-  const now = new Date();
   const end = new Date();
-  end.setHours(0, 0, 0, 0);
-  end.setDate(end.getDate() + 1);
+  end.setUTCHours(0, 0, 0, 0);
+  end.setUTCDate(end.getUTCDate() + 1);
 
   let start;
   if (range === "monthly") {
-    start = new Date(end);
-    start.setDate(1);
+    start = new Date(end.getTime());
+    start.setUTCDate(1);
   } else if (range === "yearly") {
-    start = new Date(end);
-    start.setMonth(0, 1);
+    start = new Date(end.getTime());
+    start.setUTCMonth(0, 1);
   } else if (range === "custom" && startDate && endDate) {
-    start = new Date(startDate);
-    start.setHours(0, 0, 0, 0);
+    const [startYear, startMonth, startDay] = startDate.split("-").map(Number);
+    start = new Date(Date.UTC(startYear, startMonth - 1, startDay, 0, 0, 0, 0));
 
-    const endInclusive = new Date(endDate);
-    endInclusive.setHours(0, 0, 0, 0);
-    endInclusive.setDate(endInclusive.getDate() + 1);
+    const [endYear, endMonth, endDay] = endDate.split("-").map(Number);
+    const endInclusive = new Date(Date.UTC(endYear, endMonth - 1, endDay, 0, 0, 0, 0));
+    endInclusive.setUTCDate(endInclusive.getUTCDate() + 1);
     end.setTime(endInclusive.getTime());
   } else {
-    start = new Date(end);
-    start.setDate(start.getDate() - 6);
+    start = new Date(end.getTime());
+    start.setUTCDate(start.getUTCDate() - 6);
   }
 
   if (start > end) {
-    start = new Date(end);
-    start.setDate(end.getDate() - 6);
+    start = new Date(end.getTime());
+    start.setUTCDate(end.getUTCDate() - 6);
   }
 
   const days = createSeries(start, end);
-  const lastDay = new Date(end);
-  lastDay.setDate(lastDay.getDate() - 1);
+  const lastDay = new Date(end.getTime());
+  lastDay.setUTCDate(lastDay.getUTCDate() - 1);
 
   return {
     start,
@@ -97,6 +90,7 @@ function formatSaleDate(value) {
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   }).format(new Date(value));
 }
 
@@ -152,10 +146,10 @@ function summarizeBestSellers(items) {
 
 function getLastSevenDays() {
   const end = new Date();
-  end.setHours(0, 0, 0, 0);
-  end.setDate(end.getDate() + 1);
-  const start = new Date(end);
-  start.setDate(start.getDate() - 7);
+  end.setUTCHours(0, 0, 0, 0);
+  end.setUTCDate(end.getUTCDate() + 1);
+  const start = new Date(end.getTime());
+  start.setUTCDate(start.getUTCDate() - 7);
   return createSeries(start, end);
 }
 

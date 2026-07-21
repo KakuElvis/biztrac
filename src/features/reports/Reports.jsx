@@ -18,6 +18,7 @@ import {
   Loader2,
   UsersRound,
 } from "lucide-react";
+import html2pdf from "html2pdf.js";
 import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
 import { emptyReportSummary } from "../../services/reportService.js";
@@ -32,7 +33,9 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function buildReportHtml(summary, businessName, periodLabel, startDate, endDate, lowStock, reportRange) {
+function buildReportHtml(summary, business, periodLabel, startDate, endDate, lowStock) {
+  const businessName = business?.name || "BizTrac Business";
+  const appName = "BizTrac";
   return `<!doctype html>
   <html>
     <head>
@@ -53,10 +56,25 @@ function buildReportHtml(summary, businessName, periodLabel, startDate, endDate,
     </head>
     <body>
       <div class="page">
-        <div class="header">
-          <p class="small">${escapeHtml(periodLabel)} (${escapeHtml(startDate || "-")} to ${escapeHtml(endDate || "-")})</p>
-          <h1>${escapeHtml(businessName)} report</h1>
-          <p class="small">${escapeHtml(reportRange === "custom" ? "Custom date range" : `${periodLabel} summary`)}</p>
+        <div class="header" style="border-bottom: 2px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
+            <div>
+              <h1 style="font-size: 1.75rem; font-weight: 900; color: #022864; margin: 0;">${escapeHtml(businessName)}</h1>
+              <p class="small" style="margin: 6px 0 0 0; color: #475569; font-weight: 500; font-size: 0.875rem;">
+                ${business?.location ? `Location: ${escapeHtml(business.location)}` : ""}
+                ${business?.phone ? `${business.location ? " | " : ""}Phone: ${escapeHtml(business.phone)}` : ""}
+                ${business?.email ? `${(business.location || business.phone) ? " | " : ""}Email: ${escapeHtml(business.email)}` : ""}
+              </p>
+            </div>
+            <div style="text-align: right; min-width: 180px;">
+              <p class="small" style="margin: 0; font-weight: 700; color: #027AEC; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.8rem;">
+                ${escapeHtml(periodLabel)} Performance Report
+              </p>
+              <p class="small" style="margin: 4px 0 0 0; font-size: 0.85rem; font-weight: 600;">
+                ${escapeHtml(startDate || "-")} to ${escapeHtml(endDate || "-")}
+              </p>
+            </div>
+          </div>
         </div>
 
         <div class="summary-grid">
@@ -124,15 +142,35 @@ function buildReportHtml(summary, businessName, periodLabel, startDate, endDate,
             </tbody>
           </table>
         </div>
+        <div class="footer" style="margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center; font-size: 0.8rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
+          Powered by ${appName}
+        </div>
       </div>
     </body>
   </html>`;
 }
 
-function printReport(summary, lowStock, reportRange, reportStartDate, reportEndDate) {
-  const businessName = "BizTrac";
+async function printReport(business, summary, lowStock, reportRange, reportStartDate, reportEndDate) {
+  const businessName = business?.name || "BizTrac Business";
   const periodLabel = reportRange === "monthly" ? "Monthly" : reportRange === "yearly" ? "Yearly" : reportRange === "custom" ? "Custom" : "Weekly";
-  const html = buildReportHtml(summary, businessName, periodLabel, reportStartDate, reportEndDate, lowStock, reportRange);
+  const html = buildReportHtml(summary, business, periodLabel, reportStartDate, reportEndDate, lowStock);
+  // Generate a PDF using the bundled html2pdf library. If it errors, fall back to a print window.
+  try {
+    await html2pdf()
+      .set({
+        margin: 10,
+        filename: `${businessName.replace(/\s+/g, "-")}-report.pdf`,
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      })
+      .from(html)
+      .save();
+    return;
+  } catch (err) {
+    console.warn("html2pdf generation failed, falling back to print window", err);
+  }
+
+  // Fallback: open print window (kept for compatibility)
   const printWindow = window.open("about:blank", "_blank", "width=900,height=800");
 
   if (!printWindow) {
@@ -168,6 +206,7 @@ function LoadingState({ children }) {
 }
 
 export function Reports({
+  business,
   products = [],
   productsLoading,
   reportSummary = emptyReportSummary,
@@ -276,7 +315,7 @@ export function Reports({
                   variant="secondary"
                   type="button"
                   className="w-full"
-                  onClick={() => printReport(summary, lowStock, reportRange, reportStartDate, reportEndDate)}
+                  onClick={() => printReport(business, summary, lowStock, reportRange, reportStartDate, reportEndDate)}
                 >
                   Export PDF
                 </Button>
