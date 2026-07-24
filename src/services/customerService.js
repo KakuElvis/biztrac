@@ -29,3 +29,28 @@ export async function listCustomers(businessId) {
   if (error) throw error;
   return data.map(toCustomer);
 }
+
+export async function createCustomer(businessId, { name, phone = "", email = "", notes = "" }) {
+  const { data, error } = await requireSupabase()
+    .from("customers")
+    .insert([
+      { business_id: businessId, name: (name || "").trim(), phone: (phone || "").trim(), email: (email || "").trim(), notes: (notes || "").trim() },
+    ])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return toCustomer(data);
+}
+
+export async function payCustomerDebt(businessId, customerId, amount, paymentMethod = "cash") {
+  const { data, error } = await requireSupabase().rpc("pay_debt", {
+    p_business_id: businessId,
+    p_customer_id: customerId,
+    p_amount: Number(amount),
+    p_payment_method: (paymentMethod || "cash").toLowerCase(),
+  });
+
+  if (error) throw error;
+  return data;
+}

@@ -1,17 +1,5 @@
-import { supabase } from "../lib/supabase.js";
+import { requireSupabase, toNumber } from "./serviceUtils.js";
 import { toCustomer } from "./customerService.js";
-
-function requireSupabase() {
-  if (!supabase) {
-    throw new Error("Supabase is not configured. Add the project URL and anon key to .env.");
-  }
-
-  return supabase;
-}
-
-function toNumber(value) {
-  return Number(value || 0);
-}
 
 function toPaymentMethod(value) {
   const normalized = String(value || "cash").toLowerCase();
@@ -71,7 +59,7 @@ function validateLines(lines) {
   });
 }
 
-export async function createSale(businessId, { customer, lines, paymentType }) {
+export async function createSale(businessId, { customer, lines, paymentType, amountPaid }) {
   validateLines(lines);
 
   const paymentMethod = toPaymentMethod(paymentType);
@@ -94,6 +82,7 @@ export async function createSale(businessId, { customer, lines, paymentType }) {
     })),
     p_notes: null,
     p_payment_method: paymentMethod,
+    p_amount_paid: amountPaid !== undefined && amountPaid !== null ? Number(amountPaid) : null,
   });
 
   if (error) throw error;

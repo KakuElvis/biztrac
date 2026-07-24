@@ -18,6 +18,7 @@ import {
 import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
 import { formatCurrency } from "../../lib/formatters.js";
+import { showToast } from "../../lib/toast.js";
 
 const fallbackBusiness = {
   name: "BizTrac",
@@ -89,6 +90,7 @@ export function More({
       setSuccessMessage("Business profile saved.");
     } catch (saveError) {
       console.error("Unable to save business profile", saveError);
+      showToast("Unable to save business profile");
       setError(saveError.message || "Unable to save business profile.");
     } finally {
       setIsSaving(false);
@@ -238,3 +240,5 @@ export function More({
     </div>
   );
 }
+
+export default More;

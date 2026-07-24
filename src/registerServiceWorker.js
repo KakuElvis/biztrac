@@ -1,3 +1,5 @@
+import { showToast } from "./lib/toast.js";
+
 export function registerServiceWorker() {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
     return;
@@ -11,6 +13,7 @@ export function registerServiceWorker() {
       })
       .catch((registrationError) => {
         console.error("Service worker registration failed:", registrationError);
+        showToast("Service worker registration failed", { type: "warn" });
       });
   });
 }

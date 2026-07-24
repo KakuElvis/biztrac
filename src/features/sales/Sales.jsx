@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   AlertCircle,
   CheckCircle2,
+  Copy,
+  MessageSquare,
   Minus,
   Plus,
   Printer,
@@ -14,6 +16,12 @@ import {
 import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
 import { formatCurrency } from "../../lib/formatters.js";
+import { showToast } from "../../lib/toast.js";
+import {
+  enqueueOfflineSale,
+  getQueuedSales,
+  syncOfflineQueue,
+} from "../../services/offlineQueueService.js";
 
 const paymentTypes = ["Cash", "MoMo", "Bank", "Credit"];
 
@@ -63,6 +71,48 @@ function buildReceiptText(receipt, business) {
   ]
     .filter((line) => line !== "")
     .join("\n");
+}
+
+function formatGhanaPhoneForWhatsApp(phone) {
+  if (!phone) return "";
+  let digits = String(phone).replace(/[^0-9]/g, "");
+  if (digits.startsWith("0") && digits.length === 10) {
+    digits = "233" + digits.slice(1);
+  }
+  return digits;
+}
+
+function buildWhatsAppReceiptText(receipt, business) {
+  const businessName = business?.name || "BizTrac Business";
+  const businessDetails = [business?.phone, business?.location].filter(Boolean).join(" | ");
+
+  const lineItems = (receipt.lines || [])
+    .map((line) => `• *${line.name}* (x${line.quantity}) - ${formatCurrency(line.total)}`)
+    .join("\n");
+
+  const lines = [
+    `🧾 *RECEIPT - ${businessName.toUpperCase()}*`,
+    businessDetails ? `📍 ${businessDetails}` : "",
+    `--------------------------------`,
+    `🔢 *Ref:* ${receipt.reference || "Draft"}`,
+    `📅 *Date:* ${formatReceiptDate(receipt.createdAt || new Date().toISOString())}`,
+    `👤 *Customer:* ${receipt.customerName || "Walk-in"}`,
+    `💳 *Payment:* ${receipt.paymentType || "Cash"}`,
+    `--------------------------------`,
+    `*ITEMS:*`,
+    lineItems,
+    `--------------------------------`,
+    `💰 *TOTAL:* ${formatCurrency(receipt.total)}`,
+  ];
+
+  if (receipt.paymentType === "Credit") {
+    lines.push(`⚠️ *Remaining Balance:* ${formatCurrency(receipt.profit || 0)}`);
+  }
+
+  lines.push("");
+  lines.push("🙏 *Thank you for buying from us!*");
+
+  return lines.filter((l) => l !== "").join("\n");
 }
 
 function normalizePdfText(value) {
@@ -300,8 +350,11 @@ export function Sales({
   const [actionError, setActionError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [queuedCount, setQueuedCount] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [lastReceipt, setLastReceipt] = useState(null);
   const [paymentType, setPaymentType] = useState("MoMo");
+  const [downPayment, setDownPayment] = useState("");
   const [customerMode, setCustomerMode] = useState("walk-in");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [newCustomerName, setNewCustomerName] = useState("");
@@ -353,6 +406,38 @@ export function Sales({
 
     return { mode: "walk-in" };
   }
+
+  const readQueueItems = useCallback(async () => {
+    try {
+      const queued = await getQueuedSales();
+      setQueuedCount(queued.length);
+    } catch {
+      setQueuedCount(0);
+    }
+  }, []);
+
+  const flushOfflineQueue = useCallback(async () => {
+    if (!onCompleteSale) return;
+    try {
+      const synced = await syncOfflineQueue((bId, payload) => onCompleteSale(payload));
+      if (synced > 0) {
+        await readQueueItems();
+      }
+    } catch (err) {
+      console.error("Error flushing offline queue", err);
+    }
+  }, [onCompleteSale, readQueueItems]);
+
+  useEffect(() => {
+    const onOnline = () => flushOfflineQueue();
+    window.addEventListener("online", onOnline);
+    if (navigator.onLine) flushOfflineQueue();
+    return () => window.removeEventListener("online", onOnline);
+  }, [flushOfflineQueue]);
+
+  useEffect(() => {
+    readQueueItems();
+  }, [readQueueItems]);
 
   const addToCart = (productId) => {
     setActionError("");
@@ -423,10 +508,12 @@ export function Sales({
 
     setIsSaving(true);
     try {
+      const parsedDownPayment = paymentType === "Credit" && downPayment ? Number(downPayment) : 0;
       const sale = await onCompleteSale({
         customer: getCustomerPayload(),
         lines: cartLines,
         paymentType,
+        amountPaid: parsedDownPayment,
       });
       const receipt = {
         reference: sale.reference,
@@ -444,12 +531,57 @@ export function Sales({
       setSelectedCustomerId("");
       setNewCustomerName("");
       setNewCustomerPhone("");
+      setDownPayment("");
       setSuccessMessage(`Sale ${sale.reference} recorded.`);
+      showToast(`Sale ${sale.reference} recorded.`, { type: "success" });
+      // clear success message after a short delay
+      setTimeout(() => setSuccessMessage(""), 4000);
     } catch (error) {
       console.error("Unable to complete sale", error);
-      setActionError(error.message || "Unable to complete sale.");
+      const isNetworkError = !navigator.onLine || /failed to fetch|networkerror|network error/i.test(error.message || "");
+      if (isNetworkError) {
+        try {
+          const createdAt = new Date().toISOString();
+          await enqueueOfflineSale(business?.id || null, {
+            customer: getCustomerPayload(),
+            lines: cartLines,
+            paymentType,
+          });
+          showToast("No network — sale saved to IndexedDB offline queue.", { type: "warn" });
+          setActionError("Saved offline — will sync when connection resumes.");
+          const draftReceipt = {
+            reference: `OFFLINE-${createdAt.replace(/[:.]/g, "-")}`,
+            customerName: getCustomerName(),
+            lines: cartLines.map(toReceiptLine),
+            paymentType,
+            total,
+            profit,
+            createdAt,
+          };
+          setLastReceipt(draftReceipt);
+          setCart([]);
+          await readQueueItems();
+        } catch (qErr) {
+          console.error("Failed to queue sale", qErr);
+          showToast("Unable to record sale.");
+          setActionError(error.message || "Unable to complete sale.");
+        }
+      } else {
+        showToast("Unable to complete sale");
+        setActionError(error.message || "Unable to complete sale.");
+      }
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const syncNow = async () => {
+    setIsSyncing(true);
+    try {
+      await flushOfflineQueue();
+      await readQueueItems();
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -497,6 +629,7 @@ export function Sales({
       } catch (error) {
         if (error.name === "AbortError") return;
         console.error("Unable to share receipt PDF", error);
+        showToast("Unable to share receipt PDF");
         setActionError(error.message || "Unable to share the PDF receipt.");
         return;
       }
@@ -504,6 +637,45 @@ export function Sales({
 
     downloadFile(pdfFile);
     setActionError("PDF receipt downloaded. Attach it in WhatsApp because this browser cannot share PDF files directly.");
+  };
+
+  const sendWhatsAppReceipt = () => {
+    setActionError("");
+    if (!lastReceipt) {
+      setActionError("Complete a sale before sharing a receipt on WhatsApp.");
+      return;
+    }
+
+    const customerObj = customers.find((c) => c.id === selectedCustomerId);
+    const customerPhone = customerObj?.phone || newCustomerPhone || "";
+    const formattedPhone = formatGhanaPhoneForWhatsApp(customerPhone);
+    const text = buildWhatsAppReceiptText(lastReceipt, business);
+    const encodedText = encodeURIComponent(text);
+
+    let url = `https://wa.me/?text=${encodedText}`;
+    if (formattedPhone) {
+      url = `https://wa.me/${formattedPhone}?text=${encodedText}`;
+    }
+
+    window.open(url, "_blank");
+    showToast("Opening WhatsApp…", { type: "info" });
+  };
+
+  const copyReceiptText = async () => {
+    setActionError("");
+    if (!lastReceipt) {
+      setActionError("Complete a sale before copying the receipt text.");
+      return;
+    }
+
+    const text = buildWhatsAppReceiptText(lastReceipt, business);
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast("Receipt text copied to clipboard!", { type: "success" });
+    } catch (error) {
+      console.error("Unable to copy receipt text", error);
+      showToast("Unable to copy receipt text.");
+    }
   };
 
   return (
@@ -619,6 +791,49 @@ export function Sales({
                 </button>
               ))}
             </div>
+            {paymentType === "Credit" ? (
+              <div className="mt-3 rounded-2xl border border-palm/30 bg-sky-50/50 p-3.5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-black uppercase tracking-wider text-palm">
+                    Partial Payment / Upfront Deposit
+                  </p>
+                  <span className="text-[10px] font-bold rounded-full bg-palm/10 px-2 py-0.5 text-palm">
+                    Credit Sale
+                  </span>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-600 block">
+                    Amount Paid Upfront (GHS)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={total}
+                    step="0.01"
+                    className="field mt-1 text-base font-black text-ink bg-white border-palm/40 focus:border-palm"
+                    placeholder="0.00 (Enter upfront payment if any)"
+                    value={downPayment}
+                    onChange={(event) => setDownPayment(event.target.value)}
+                  />
+                </div>
+
+                <div className="rounded-xl bg-white p-2.5 border border-slate-200/80 space-y-1 text-xs font-bold">
+                  <div className="flex justify-between text-slate-500">
+                    <span>Cart Total:</span>
+                    <span>{formatCurrency(total)}</span>
+                  </div>
+                  <div className="flex justify-between text-palm font-extrabold">
+                    <span>Upfront Payment:</span>
+                    <span>{formatCurrency(Number(downPayment) || 0)}</span>
+                  </div>
+                  <div className="flex justify-between text-red-600 font-extrabold border-t border-slate-100 pt-1">
+                    <span>Remaining Balance Owed:</span>
+                    <span>{formatCurrency(Math.max(0, total - (Number(downPayment) || 0)))}</span>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="panel p-4">
@@ -696,6 +911,18 @@ export function Sales({
             receipt={previewReceipt}
           />
 
+          {queuedCount ? (
+            <div className="panel p-4">
+              <p className="label">Queued sales</p>
+              <p className="mt-1 text-sm text-slate-500">{queuedCount} sale{queuedCount > 1 ? "s" : ""} saved offline</p>
+              <div className="mt-3">
+                <Button icon={Send} variant="secondary" onClick={syncNow} isLoading={isSyncing} disabled={isSyncing}>
+                  Sync now
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid gap-2">
             {actionError ? (
               <div className="flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
@@ -711,11 +938,23 @@ export function Sales({
             ) : null}
             <Button
               icon={ReceiptText}
-              disabled={!cartLines.length}
+              disabled={!cartLines.length || isSaving}
               isLoading={isSaving}
               onClick={completeSale}
             >
               Complete sale
+            </Button>
+            <button
+              type="button"
+              disabled={!lastReceipt}
+              onClick={sendWhatsAppReceipt}
+              className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white shadow-soft transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <MessageSquare className="h-4 w-4" />
+              <span>Send to WhatsApp</span>
+            </button>
+            <Button icon={Copy} variant="secondary" disabled={!lastReceipt} onClick={copyReceiptText}>
+              Copy receipt text
             </Button>
             <Button icon={Printer} variant="secondary" disabled={!lastReceipt} onClick={printReceipt}>
               Print receipt
@@ -780,3 +1019,5 @@ function ReceiptPreview({ business, receipt }) {
     </div>
   );
 }
+
+export default Sales;

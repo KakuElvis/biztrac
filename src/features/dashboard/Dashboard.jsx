@@ -164,7 +164,7 @@ export function Dashboard({
               { label: "Create invoice", icon: ReceiptText, screen: "more" },
               { label: "Record expense", icon: WalletCards, screen: "expenses" },
               { label: "Stock in", icon: Boxes, screen: "inventory" },
-              { label: "Debtors list", icon: CreditCard, screen: "more" },
+              { label: "Debtors list", icon: CreditCard, screen: "customers" },
             ].map((action) => (
               <button
                 key={action.label}
@@ -249,7 +249,9 @@ export function Dashboard({
               <p className="label">Debtors</p>
               <h2 className="mt-1 text-lg font-black text-ink">Follow up</h2>
             </div>
-            <CreditCard className="h-5 w-5 text-slate-400" />
+            <button className="text-sm font-bold text-palm" onClick={() => onNavigate("customers")}>
+              View & Pay
+            </button>
           </div>
           <div className="mt-4 divide-y divide-slate-100">
             {dashboardLoading ? <LoadingState>Loading debtors</LoadingState> : null}
@@ -274,3 +276,5 @@ export function Dashboard({
     </div>
   );
 }
+
+export default Dashboard;

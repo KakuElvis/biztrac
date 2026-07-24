@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { showToast } from "../../lib/toast.js";
 import { AlertCircle, CalendarDays, CreditCard, Loader2, Plus, WalletCards } from "lucide-react";
 import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
@@ -85,6 +86,7 @@ export function Expenses({
       setForm(initialForm());
     } catch (error) {
       console.error("Unable to save expense", error);
+      showToast("Unable to save expense");
       setActionError(error.message || "Unable to save expense.");
     } finally {
       setIsSaving(false);
@@ -257,3 +259,5 @@ export function Expenses({
     </div>
   );
 }
+
+export default Expenses;

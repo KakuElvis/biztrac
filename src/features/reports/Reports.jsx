@@ -1,24 +1,16 @@
-import { useMemo } from "react";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-} from "recharts";
+import { useMemo, useEffect, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
   ChartNoAxesCombined,
   Crown,
   FileDown,
+  FileSpreadsheet,
   Loader2,
   UsersRound,
 } from "lucide-react";
-import html2pdf from "html2pdf.js";
+// Dynamically import heavy libraries at runtime to keep the initial bundle small.
+import { showToast } from "../../lib/toast.js";
 import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
 import { emptyReportSummary } from "../../services/reportService.js";
@@ -154,8 +146,30 @@ async function printReport(business, summary, lowStock, reportRange, reportStart
   const businessName = business?.name || "BizTrac Business";
   const periodLabel = reportRange === "monthly" ? "Monthly" : reportRange === "yearly" ? "Yearly" : reportRange === "custom" ? "Custom" : "Weekly";
   const html = buildReportHtml(summary, business, periodLabel, reportStartDate, reportEndDate, lowStock);
-  // Generate a PDF using the bundled html2pdf library. If it errors, fall back to a print window.
+  // Generate a PDF using html2pdf loaded from a CDN to keep it out of the app bundle.
+  // If it errors, fall back to a print window.
+  async function loadHtml2PdfFromCdn() {
+    if (window.html2pdf) return window.html2pdf;
+    return new Promise((resolve, reject) => {
+      try {
+        const script = document.createElement("script");
+        script.src = "https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js";
+        script.async = true;
+        script.onload = () => {
+          // html2pdf exposes a global factory function
+          if (window.html2pdf) return resolve(window.html2pdf);
+          return reject(new Error("html2pdf did not initialize on window"));
+        };
+        script.onerror = () => reject(new Error("Failed to load html2pdf from CDN"));
+        document.head.appendChild(script);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
   try {
+    const html2pdf = await loadHtml2PdfFromCdn();
     await html2pdf()
       .set({
         margin: 10,
@@ -168,6 +182,7 @@ async function printReport(business, summary, lowStock, reportRange, reportStart
     return;
   } catch (err) {
     console.warn("html2pdf generation failed, falling back to print window", err);
+    showToast("Export failed; falling back to print window", { type: "warn" });
   }
 
   // Fallback: open print window (kept for compatibility)
@@ -182,10 +197,67 @@ async function printReport(business, summary, lowStock, reportRange, reportStart
   printWindow.document.write(html);
   printWindow.document.close();
 
-  printWindow.onload = () => {
-    printWindow.focus();
-    printWindow.print();
-  };
+}
+
+function buildReportCsv(summary, business, periodLabel, startDate, endDate, lowStock) {
+  const businessName = business?.name || "BizTrac Business";
+  const lines = [];
+
+  lines.push(`"BUSINESS NAME","${businessName.replace(/"/g, '""')}"`);
+  lines.push(`"REPORT PERIOD","${periodLabel}"`);
+  lines.push(`"DATE RANGE","${startDate || "-"} to ${endDate || "-"}"`);
+  lines.push("");
+
+  lines.push(`"SUMMARY METRICS"`);
+  lines.push(`"Sales Total","${summary.salesTotal}"`);
+  lines.push(`"Expense Total","${summary.expenseTotal}"`);
+  lines.push(`"Profit Total","${summary.profitTotal}"`);
+  lines.push("");
+
+  lines.push(`"DAILY BREAKDOWN"`);
+  lines.push(`"Date / Day","Sales","Expenses"`);
+  (summary.series || []).forEach((item) => {
+    lines.push(`"${item.day}","${item.sales}","${item.expenses}"`);
+  });
+  lines.push("");
+
+  lines.push(`"BEST SELLERS"`);
+  lines.push(`"Product Name","Quantity Sold","Total Value"`);
+  (summary.bestSellers || []).forEach((item) => {
+    lines.push(`"${item.name.replace(/"/g, '""')}","${item.quantity}","${item.amount}"`);
+  });
+  lines.push("");
+
+  lines.push(`"LOW STOCK REPORT"`);
+  lines.push(`"Product Name","Quantity Remaining","Category/Colour"`);
+  lowStock.forEach((item) => {
+    lines.push(`"${item.name.replace(/"/g, '""')}","${item.quantity}","${(item.colour || item.category || "Stock").replace(/"/g, '""')}"`);
+  });
+  lines.push("");
+
+  lines.push(`"DEBTORS REPORT"`);
+  lines.push(`"Customer Name","Due Date","Amount Owed"`);
+  (summary.debtors || []).forEach((item) => {
+    lines.push(`"${item.name.replace(/"/g, '""')}","${item.due}","${item.amount}"`);
+  });
+
+  return lines.join("\n");
+}
+
+function exportReportCsv(business, summary, lowStock, reportRange, reportStartDate, reportEndDate) {
+  const businessName = business?.name || "BizTrac Business";
+  const periodLabel = reportRange === "monthly" ? "Monthly" : reportRange === "yearly" ? "Yearly" : reportRange === "custom" ? "Custom" : "Weekly";
+  const csvContent = buildReportCsv(summary, business, periodLabel, reportStartDate, reportEndDate, lowStock);
+
+  const filename = `${businessName.replace(/\s+/g, "-")}-${periodLabel.toLowerCase()}-report.csv`;
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  link.click();
+  URL.revokeObjectURL(url);
+  showToast("CSV report downloaded.", { type: "success" });
 }
 
 function EmptyState({ children }) {
@@ -229,6 +301,20 @@ export function Reports({
     if (reportRange === "custom") return "Custom period";
     return "Weekly";
   }, [reportRange]);
+
+  const [Recharts, setRecharts] = useState(null);
+  useEffect(() => {
+    let mounted = true;
+    // Load recharts as an ESM module from a CDN to keep it out of the app bundle.
+    import("https://cdn.jsdelivr.net/npm/recharts@3.9.2/esm/index.js")
+      .then((mod) => {
+        if (mounted) setRecharts(mod);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -309,7 +395,16 @@ export function Reports({
                 </p>
                 <p className="text-xs text-slate-500">Download or refresh custom reports.</p>
               </div>
-              <div className="grid gap-3">
+              <div className="grid gap-2">
+                <Button
+                  icon={FileSpreadsheet}
+                  variant="secondary"
+                  type="button"
+                  className="w-full"
+                  onClick={() => exportReportCsv(business, summary, lowStock, reportRange, reportStartDate, reportEndDate)}
+                >
+                  Export Excel / CSV
+                </Button>
                 <Button
                   icon={FileDown}
                   variant="secondary"
@@ -374,31 +469,37 @@ export function Reports({
             </Badge>
           </div>
           <div className="mt-5 h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={series} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#027AEC" stopOpacity={0.35} />
-                    <stop offset="95%" stopColor="#027AEC" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" vertical={false} />
-                <XAxis
-                  dataKey="day"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#64748b", fontSize: 12 }}
-                />
-                <Tooltip formatter={(value) => formatCurrency(value)} />
-                <Area
-                  type="monotone"
-                  dataKey="sales"
-                  stroke="#027AEC"
-                  strokeWidth={3}
-                  fill="url(#salesGradient)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            {Recharts ? (
+              <Recharts.ResponsiveContainer width="100%" height="100%">
+                <Recharts.AreaChart data={series} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#027AEC" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#027AEC" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <Recharts.CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" vertical={false} />
+                  <Recharts.XAxis
+                    dataKey="day"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: "#64748b", fontSize: 12 }}
+                  />
+                  <Recharts.Tooltip formatter={(value) => formatCurrency(value)} />
+                  <Recharts.Area
+                    type="monotone"
+                    dataKey="sales"
+                    stroke="#027AEC"
+                    strokeWidth={3}
+                    fill="url(#salesGradient)"
+                  />
+                </Recharts.AreaChart>
+              </Recharts.ResponsiveContainer>
+            ) : (
+              <div className="h-72 flex items-center justify-center">
+                <LoadingState>Loading chart</LoadingState>
+              </div>
+            )}
           </div>
         </div>
 
@@ -411,20 +512,26 @@ export function Reports({
             <ChartNoAxesCombined className="h-5 w-5 text-slate-400" />
           </div>
           <div className="mt-5 h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={series} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" vertical={false} />
-                <XAxis
-                  dataKey="day"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#64748b", fontSize: 12 }}
-                />
-                <Tooltip formatter={(value) => formatCurrency(value)} />
-                <Bar dataKey="sales" fill="#027AEC" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="expenses" fill="#F5A623" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {Recharts ? (
+              <Recharts.ResponsiveContainer width="100%" height="100%">
+                <Recharts.BarChart data={series} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+                  <Recharts.CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" vertical={false} />
+                  <Recharts.XAxis
+                    dataKey="day"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: "#64748b", fontSize: 12 }}
+                  />
+                  <Recharts.Tooltip formatter={(value) => formatCurrency(value)} />
+                  <Recharts.Bar dataKey="sales" fill="#027AEC" radius={[8, 8, 0, 0]} />
+                  <Recharts.Bar dataKey="expenses" fill="#F5A623" radius={[8, 8, 0, 0]} />
+                </Recharts.BarChart>
+              </Recharts.ResponsiveContainer>
+            ) : (
+              <div className="h-72 flex items-center justify-center">
+                <LoadingState>Loading chart</LoadingState>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -507,3 +614,5 @@ function ReportList({ emptyText, isLoading, label, title, icon: Icon, items }) {
     </article>
   );
 }
+
+export default Reports;

@@ -633,3 +633,5 @@ function TextField({ form, label, name, setField }) {
     </FormField>
   );
 }
+
+export default Inventory;

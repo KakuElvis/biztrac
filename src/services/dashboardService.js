@@ -1,10 +1,16 @@
-import { supabase } from "../lib/supabase.js";
 import {
   debtors as demoDebtors,
   expenses as demoExpenses,
   products as demoProducts,
   sales as demoSales,
 } from "../lib/mockData.js";
+import {
+  requireSupabase,
+  toNumber,
+  shortReference,
+  formatPaymentMethod,
+  loadCustomerNames,
+} from "./serviceUtils.js";
 
 export const emptyDashboardSummary = {
   todaySales: 0,
@@ -17,18 +23,6 @@ export const emptyDashboardSummary = {
   recentSales: [],
   debtors: [],
 };
-
-function requireSupabase() {
-  if (!supabase) {
-    throw new Error("Supabase is not configured. Add the project URL and anon key to .env.");
-  }
-
-  return supabase;
-}
-
-function toNumber(value) {
-  return Number(value || 0);
-}
 
 function getTodayBounds() {
   const start = new Date();
@@ -44,17 +38,6 @@ function getTodayBounds() {
       start.getDate()
     ).padStart(2, "0")}`,
   };
-}
-
-function formatPaymentMethod(value) {
-  const labels = {
-    bank: "Bank",
-    cash: "Cash",
-    credit: "Credit",
-    momo: "MoMo",
-  };
-
-  return labels[value] || "Sale";
 }
 
 function formatSaleTime(value) {
@@ -80,10 +63,6 @@ function formatSaleTime(value) {
   }).format(date);
 }
 
-function shortReference(row) {
-  return row.reference || `BT-${String(row.id).slice(0, 8).toUpperCase()}`;
-}
-
 function toRecentSale(row, customerNames) {
   return {
     id: shortReference(row),
@@ -101,21 +80,6 @@ function toDebtor(row, customerNames) {
     amount: Math.max(toNumber(row.total) - toNumber(row.amount_paid), 0),
     due: formatSaleTime(row.sold_at),
   };
-}
-
-async function loadCustomerNames(client, businessId, rows) {
-  const customerIds = [...new Set(rows.map((row) => row.customer_id).filter(Boolean))];
-  if (!customerIds.length) return new Map();
-
-  const { data, error } = await client
-    .from("customers")
-    .select("id, name")
-    .eq("business_id", businessId)
-    .in("id", customerIds);
-
-  if (error) throw error;
-
-  return new Map(data.map((customer) => [customer.id, customer.name]));
 }
 
 export function getDemoDashboardSummary(products = demoProducts) {
@@ -147,7 +111,7 @@ export async function getDashboardSummary(businessId) {
   const client = requireSupabase();
   const { startIso, endIso, dateKey } = getTodayBounds();
 
-  const [todaySalesResult, expensesResult, recentSalesResult, debtorSalesResult] =
+  const [todaySalesResult, expensesResult, recentSalesResult, debtorBalancesResult] =
     await Promise.all([
       client
         .from("sales")
@@ -168,17 +132,15 @@ export async function getDashboardSummary(businessId) {
         .order("sold_at", { ascending: false })
         .limit(5),
       client
-        .from("sales")
-        .select("id, reference, customer_id, total, amount_paid, sold_at")
+        .from("customer_balances")
+        .select("customer_id, customer_name, total_debt, latest_sale_at")
         .eq("business_id", businessId)
-        .order("sold_at", { ascending: false })
-        .limit(50),
+        .order("latest_sale_at", { ascending: false }),
     ]);
 
   if (todaySalesResult.error) throw todaySalesResult.error;
   if (expensesResult.error) throw expensesResult.error;
   if (recentSalesResult.error) throw recentSalesResult.error;
-  if (debtorSalesResult.error) throw debtorSalesResult.error;
 
   const todaySaleIds = todaySalesResult.data.map((sale) => sale.id);
   const saleItemsResult = todaySaleIds.length
@@ -190,10 +152,41 @@ export async function getDashboardSummary(businessId) {
 
   if (saleItemsResult.error) throw saleItemsResult.error;
 
-  const customerNames = await loadCustomerNames(client, businessId, [
-    ...recentSalesResult.data,
-    ...debtorSalesResult.data,
-  ]);
+  const customerNames = await loadCustomerNames(client, businessId, recentSalesResult.data);
+
+  let debtors = [];
+  let totalDebtors = 0;
+  let debtorCount = 0;
+
+  if (!debtorBalancesResult.error && debtorBalancesResult.data) {
+    const balances = debtorBalancesResult.data;
+    totalDebtors = balances.reduce((sum, item) => sum + toNumber(item.total_debt), 0);
+    debtorCount = balances.length;
+    debtors = balances.slice(0, 5).map((item) => ({
+      id: item.customer_id,
+      name: item.customer_name || "Customer",
+      amount: toNumber(item.total_debt),
+      due: formatSaleTime(item.latest_sale_at),
+    }));
+  } else {
+    // Fallback if view doesn't exist yet on older schema
+    const fallbackDebtorSales = await client
+      .from("sales")
+      .select("id, reference, customer_id, total, amount_paid, sold_at")
+      .eq("business_id", businessId)
+      .order("sold_at", { ascending: false })
+      .limit(50);
+
+    if (!fallbackDebtorSales.error && fallbackDebtorSales.data) {
+      const fallbackNames = await loadCustomerNames(client, businessId, fallbackDebtorSales.data);
+      const allDebtors = fallbackDebtorSales.data
+        .map((sale) => toDebtor(sale, fallbackNames))
+        .filter((d) => d.amount > 0);
+      totalDebtors = allDebtors.reduce((sum, d) => sum + d.amount, 0);
+      debtorCount = allDebtors.length;
+      debtors = allDebtors.slice(0, 5);
+    }
+  }
 
   const totalExpenses = expensesResult.data.reduce(
     (total, expense) => total + toNumber(expense.amount),
@@ -203,10 +196,6 @@ export async function getDashboardSummary(businessId) {
     (total, item) => total + toNumber(item.line_total) - toNumber(item.unit_cost) * item.quantity,
     0
   );
-  const allDebtors = debtorSalesResult.data
-    .map((sale) => toDebtor(sale, customerNames))
-    .filter((debtor) => debtor.amount > 0);
-  const debtors = allDebtors.slice(0, 5);
 
   return {
     todaySales: todaySalesResult.data.reduce((total, sale) => total + toNumber(sale.total), 0),
@@ -214,8 +203,8 @@ export async function getDashboardSummary(businessId) {
     totalExpenses,
     expenseCount: expensesResult.data.length,
     estimatedProfit: estimatedGrossProfit - totalExpenses,
-    totalDebtors: allDebtors.reduce((total, debtor) => total + debtor.amount, 0),
-    debtorCount: allDebtors.length,
+    totalDebtors,
+    debtorCount,
     recentSales: recentSalesResult.data.map((sale) => toRecentSale(sale, customerNames)),
     debtors,
   };

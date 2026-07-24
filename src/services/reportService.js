@@ -1,17 +1,10 @@
-import { supabase } from "../lib/supabase.js";
 import { debtors as demoDebtors, reportSeries as demoReportSeries } from "../lib/mockData.js";
-
-function requireSupabase() {
-  if (!supabase) {
-    throw new Error("Supabase is not configured. Add the project URL and anon key to .env.");
-  }
-
-  return supabase;
-}
-
-function toNumber(value) {
-  return Number(value || 0);
-}
+import {
+  requireSupabase,
+  toNumber,
+  shortReference,
+  loadCustomerNames,
+} from "./serviceUtils.js";
 
 function getDateKey(date) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(
@@ -41,6 +34,7 @@ function createSeries(startDate, endDate) {
 
   return days;
 }
+
 function getDateRangeBounds(range, startDate, endDate) {
   const end = new Date();
   end.setUTCHours(0, 0, 0, 0);
@@ -94,10 +88,6 @@ function formatSaleDate(value) {
   }).format(new Date(value));
 }
 
-function shortReference(row) {
-  return row.reference || `BT-${String(row.id).slice(0, 8).toUpperCase()}`;
-}
-
 function toDebtor(row, customerNames) {
   return {
     id: row.id,
@@ -105,21 +95,6 @@ function toDebtor(row, customerNames) {
     amount: Math.max(toNumber(row.total) - toNumber(row.amount_paid), 0),
     due: formatSaleDate(row.sold_at),
   };
-}
-
-async function loadCustomerNames(client, businessId, rows) {
-  const customerIds = [...new Set(rows.map((row) => row.customer_id).filter(Boolean))];
-  if (!customerIds.length) return new Map();
-
-  const { data, error } = await client
-    .from("customers")
-    .select("id, name")
-    .eq("business_id", businessId)
-    .in("id", customerIds);
-
-  if (error) throw error;
-
-  return new Map(data.map((customer) => [customer.id, customer.name]));
 }
 
 function summarizeBestSellers(items) {
@@ -197,7 +172,7 @@ export async function getReportSummary(businessId, { range = "weekly", startDate
     seriesDays.map(({ key, day, sales, expenses }) => [key, { day, sales, expenses }])
   );
 
-  const [salesResult, expensesResult, debtorSalesResult] = await Promise.all([
+  const [salesResult, expensesResult, debtorBalancesResult] = await Promise.all([
     client
       .from("sales")
       .select("id, reference, customer_id, total, amount_paid, sold_at")
@@ -211,16 +186,14 @@ export async function getReportSummary(businessId, { range = "weekly", startDate
       .gte("incurred_on", startDateKey)
       .lte("incurred_on", endDateKey),
     client
-      .from("sales")
-      .select("id, reference, customer_id, total, amount_paid, sold_at")
+      .from("customer_balances")
+      .select("customer_id, customer_name, total_debt, latest_sale_at")
       .eq("business_id", businessId)
-      .order("sold_at", { ascending: false })
-      .limit(50),
+      .order("latest_sale_at", { ascending: false }),
   ]);
 
   if (salesResult.error) throw salesResult.error;
   if (expensesResult.error) throw expensesResult.error;
-  if (debtorSalesResult.error) throw debtorSalesResult.error;
 
   salesResult.data.forEach((sale) => {
     const point = seriesByDate.get(getDateKey(new Date(sale.sold_at)));
@@ -242,11 +215,30 @@ export async function getReportSummary(businessId, { range = "weekly", startDate
 
   if (saleItemsResult.error) throw saleItemsResult.error;
 
-  const customerNames = await loadCustomerNames(client, businessId, debtorSalesResult.data);
-  const debtors = debtorSalesResult.data
-    .map((sale) => toDebtor(sale, customerNames))
-    .filter((debtor) => debtor.amount > 0)
-    .slice(0, 5);
+  let debtors = [];
+  if (!debtorBalancesResult.error && debtorBalancesResult.data) {
+    debtors = debtorBalancesResult.data.slice(0, 5).map((item) => ({
+      id: item.customer_id,
+      name: item.customer_name || "Customer",
+      amount: toNumber(item.total_debt),
+      due: formatSaleDate(item.latest_sale_at),
+    }));
+  } else {
+    const fallbackDebtorSales = await client
+      .from("sales")
+      .select("id, reference, customer_id, total, amount_paid, sold_at")
+      .eq("business_id", businessId)
+      .order("sold_at", { ascending: false })
+      .limit(50);
+    if (!fallbackDebtorSales.error && fallbackDebtorSales.data) {
+      const fallbackNames = await loadCustomerNames(client, businessId, fallbackDebtorSales.data);
+      debtors = fallbackDebtorSales.data
+        .map((sale) => toDebtor(sale, fallbackNames))
+        .filter((debtor) => debtor.amount > 0)
+        .slice(0, 5);
+    }
+  }
+
   const series = [...seriesByDate.values()];
   const salesTotal = series.reduce((sum, point) => sum + point.sales, 0);
   const expenseTotal = series.reduce((sum, point) => sum + point.expenses, 0);
