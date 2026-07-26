@@ -255,3 +255,78 @@ export async function getReportSummary(businessId, { range = "weekly", startDate
     debtors,
   };
 }
+
+export async function getProductStockTimeline(businessId, productId) {
+  const client = requireSupabase();
+
+  const [productRes, restocksRes, saleItemsRes] = await Promise.all([
+    client.from("products").select("*").eq("id", productId).eq("business_id", businessId).single(),
+    client
+      .from("product_restocks")
+      .select("*")
+      .eq("product_id", productId)
+      .eq("business_id", businessId)
+      .order("created_at", { ascending: false }),
+    client
+      .from("sale_items")
+      .select("id, sale_id, quantity, unit_price, line_total, created_at")
+      .eq("product_id", productId)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (productRes.error) throw productRes.error;
+
+  const product = productRes.data;
+  const restocks = restocksRes.data || [];
+  const sales = saleItemsRes.data || [];
+
+  const totalSold = sales.reduce((sum, item) => sum + (item.quantity || 0), 0);
+  const totalRevenue = sales.reduce((sum, item) => sum + toNumber(item.line_total), 0);
+  const totalRestockedUnits = restocks.reduce((sum, item) => sum + (item.quantity_added || 0), 0);
+
+  return {
+    product: {
+      id: product.id,
+      name: product.name,
+      category: product.category || "",
+      sku: product.sku || "",
+      costPrice: toNumber(product.cost_price),
+      sellingPrice: toNumber(product.selling_price),
+      quantity: product.quantity,
+      lowStockLimit: product.low_stock_limit,
+      supplier: product.supplier || "",
+      size: product.size || "",
+      colour: product.colour || "",
+      brand: product.brand || "",
+      createdAt: product.created_at,
+    },
+    metrics: {
+      totalSold,
+      totalRevenue,
+      totalRestockedUnits,
+      currentValuationAtCost: toNumber(product.cost_price) * product.quantity,
+      currentValuationAtRetail: toNumber(product.selling_price) * product.quantity,
+      profitMarginPerUnit: toNumber(product.selling_price) - toNumber(product.cost_price),
+    },
+    restocks: restocks.map((r) => ({
+      id: r.id,
+      quantityAdded: r.quantity_added,
+      previousQuantity: r.previous_quantity,
+      newQuantity: r.new_quantity,
+      oldCostPrice: toNumber(r.old_cost_price),
+      newCostPrice: toNumber(r.new_cost_price),
+      oldSellingPrice: toNumber(r.old_selling_price),
+      newSellingPrice: toNumber(r.new_selling_price),
+      supplierName: r.supplier_name || "",
+      notes: r.notes || "",
+      createdAt: r.created_at,
+    })),
+    sales: sales.map((s) => ({
+      id: s.id,
+      quantity: s.quantity,
+      unitPrice: toNumber(s.unit_price),
+      lineTotal: toNumber(s.line_total),
+      createdAt: s.created_at,
+    })),
+  };
+}

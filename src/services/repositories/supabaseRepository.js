@@ -3,7 +3,7 @@ import { listCategories, createCategory } from "../categoryService.js";
 import { listCustomers, createCustomer, updateCustomer, getCustomerDetails, payCustomerDebt } from "../customerService.js";
 import { listExpenses, createExpense } from "../expenseService.js";
 import { getDashboardSummary } from "../dashboardService.js";
-import { getReportSummary } from "../reportService.js";
+import { getReportSummary, getProductStockTimeline } from "../reportService.js";
 import { createSale } from "../saleService.js";
 import { updateBusiness } from "../businessService.js";
 import {
@@ -120,6 +120,10 @@ export const supabaseRepository = {
 
   async getReportSummary(businessId, options) {
     return getReportSummary(businessId, options);
+  },
+
+  async getProductStockTimeline(businessId, productId) {
+    return getProductStockTimeline(businessId, productId);
   },
 
   async completeSale(businessId, { customer, lines, paymentType, amountPaid, dueDate }) {

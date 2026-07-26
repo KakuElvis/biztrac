@@ -148,6 +148,10 @@ export function useAnalytics(repository, businessId, isDemo, products) {
     setReportSummary(emptyReportSummary);
   };
 
+  const fetchProductStockTimeline = async (productId) => {
+    return repository.getProductStockTimeline(businessId || "demo", productId);
+  };
+
   return {
     dashboardSummary,
     setDashboardSummary,
@@ -164,6 +168,7 @@ export function useAnalytics(repository, businessId, isDemo, products) {
     reportEndDate,
     setReportEndDate,
     refreshReport: () => setReportRefreshKey((value) => value + 1),
+    fetchProductStockTimeline,
     refreshAnalytics,
     resetAnalytics,
   };

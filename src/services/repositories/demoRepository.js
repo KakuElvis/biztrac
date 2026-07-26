@@ -267,6 +267,66 @@ export const demoRepository = {
     return getDemoReportSummary(products);
   },
 
+  async getProductStockTimeline(_businessId, productId) {
+    const product = initialProducts.find((p) => String(p.id) === String(productId)) || {
+      id: productId,
+      name: "Demo Product",
+      category: "General",
+      costPrice: 50,
+      sellingPrice: 100,
+      quantity: 10,
+      lowStockLimit: 2,
+    };
+
+    const restocks = demoRestockLogs.get(String(productId)) || [
+      {
+        id: "demo-r1",
+        productId,
+        quantityAdded: 20,
+        previousQuantity: 5,
+        newQuantity: 25,
+        oldCostPrice: product.costPrice,
+        newCostPrice: product.costPrice,
+        oldSellingPrice: product.sellingPrice,
+        newSellingPrice: product.sellingPrice,
+        supplierName: "Makola Wholesalers",
+        notes: "Initial Batch Restock",
+        createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    ];
+
+    const sales = [
+      {
+        id: "demo-s1",
+        quantity: 3,
+        unitPrice: product.sellingPrice,
+        lineTotal: product.sellingPrice * 3,
+        createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    ];
+
+    const totalSold = sales.reduce((sum, s) => sum + s.quantity, 0);
+    const totalRevenue = sales.reduce((sum, s) => sum + s.lineTotal, 0);
+    const totalRestockedUnits = restocks.reduce((sum, r) => sum + r.quantityAdded, 0);
+
+    return {
+      product: {
+        ...product,
+        createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      metrics: {
+        totalSold,
+        totalRevenue,
+        totalRestockedUnits,
+        currentValuationAtCost: (product.costPrice || 0) * (product.quantity || 0),
+        currentValuationAtRetail: (product.sellingPrice || 0) * (product.quantity || 0),
+        profitMarginPerUnit: (product.sellingPrice || 0) - (product.costPrice || 0),
+      },
+      restocks,
+      sales,
+    };
+  },
+
   async completeSale({ customer, lines, currentProducts, paymentType, amountPaid, dueDate }) {
     const updatedProducts = currentProducts.map((product) => {
       const line = lines.find((item) => item.product.id === product.id);

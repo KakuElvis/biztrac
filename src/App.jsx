@@ -87,6 +87,7 @@ export default function App() {
     reportEndDate,
     setReportEndDate,
     refreshReport,
+    fetchProductStockTimeline,
     refreshAnalytics,
     resetAnalytics,
   } = useAnalytics(repository, businessId, isDemo, products);
@@ -293,6 +294,7 @@ export default function App() {
           onUpdateProduct={handleUpdateProduct}
           onRestockProduct={handleRestockProduct}
           onFetchProductRestocks={fetchProductRestocks}
+          onFetchProductStockTimeline={fetchProductStockTimeline}
           onUpdateCustomer={handleUpdateCustomer}
           onFetchCustomerDetails={fetchCustomerDetails}
           onCreateCustomer={handleCreateCustomer}

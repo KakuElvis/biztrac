@@ -114,4 +114,17 @@ describe("Demo Repository Logic", () => {
     expect(history.length).toBeGreaterThan(0);
     expect(history[0].quantityAdded).toBe(15);
   });
+
+  it("fetches product stock history timeline", async () => {
+    const all = await demoRepository.listProducts("demo");
+    const target = all[0];
+
+    const timeline = await demoRepository.getProductStockTimeline("demo", target.id);
+    expect(timeline).toHaveProperty("product");
+    expect(timeline).toHaveProperty("metrics");
+    expect(timeline).toHaveProperty("restocks");
+    expect(timeline).toHaveProperty("sales");
+    expect(timeline.metrics).toHaveProperty("currentValuationAtCost");
+    expect(timeline.metrics).toHaveProperty("profitMarginPerUnit");
+  });
 });
