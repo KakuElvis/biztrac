@@ -1,4 +1,5 @@
-import { useMemo, useEffect, useState } from "react";
+import { useMemo } from "react";
+import * as Recharts from "recharts";
 import {
   AlertCircle,
   AlertTriangle,
@@ -9,7 +10,6 @@ import {
   Loader2,
   UsersRound,
 } from "lucide-react";
-// Dynamically import heavy libraries at runtime to keep the initial bundle small.
 import { showToast } from "../../lib/toast.js";
 import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
@@ -301,20 +301,6 @@ export function Reports({
     if (reportRange === "custom") return "Custom period";
     return "Weekly";
   }, [reportRange]);
-
-  const [Recharts, setRecharts] = useState(null);
-  useEffect(() => {
-    let mounted = true;
-    // Load recharts as an ESM module from a CDN to keep it out of the app bundle.
-    import("https://cdn.jsdelivr.net/npm/recharts@3.9.2/esm/index.js")
-      .then((mod) => {
-        if (mounted) setRecharts(mod);
-      })
-      .catch(() => {});
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   return (
     <div className="space-y-6">
