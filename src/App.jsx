@@ -95,6 +95,8 @@ export default function App() {
     customersLoading,
     customersError,
     handleCreateCustomer,
+    handleUpdateCustomer,
+    fetchCustomerDetails,
     handlePayDebt,
     resetCustomers,
   } = useCustomers(repository, businessId, isDemo, refreshAnalytics);
@@ -287,6 +289,8 @@ export default function App() {
           reportsLoading={reportsLoading}
           setProducts={setProducts}
           onUpdateProduct={handleUpdateProduct}
+          onUpdateCustomer={handleUpdateCustomer}
+          onFetchCustomerDetails={fetchCustomerDetails}
           onCreateCustomer={handleCreateCustomer}
           onPayDebt={handlePayDebt}
           onNavigate={setActiveScreen}

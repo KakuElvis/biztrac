@@ -85,6 +85,18 @@ export function useCustomers(repository, businessId, isDemo, refreshAnalytics) {
     return res;
   };
 
+  const handleUpdateCustomer = async (customerId, updates) => {
+    const updated = await repository.updateCustomer(businessId, customerId, updates);
+    setCustomers((current) =>
+      current.map((c) => (String(c.id) === String(customerId) ? { ...c, ...updated } : c))
+    );
+    return updated;
+  };
+
+  const fetchCustomerDetails = async (customerId) => {
+    return repository.getCustomerDetails(businessId, customerId);
+  };
+
   const resetCustomers = (demoDebtors = initialDebtors) => {
     setCustomers(isDemo ? customersFromDebtors(demoDebtors) : []);
   };
@@ -95,6 +107,8 @@ export function useCustomers(repository, businessId, isDemo, refreshAnalytics) {
     customersLoading,
     customersError,
     handleCreateCustomer,
+    handleUpdateCustomer,
+    fetchCustomerDetails,
     handlePayDebt,
     resetCustomers,
   };

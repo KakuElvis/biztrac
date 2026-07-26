@@ -52,6 +52,69 @@ export async function createCustomer(businessId, { name, phone = "", email = "",
   return toCustomer(data);
 }
 
+export async function updateCustomer(businessId, customerId, { name, phone = "", email = "", notes = "" }) {
+  const { data, error } = await requireSupabase()
+    .from("customers")
+    .update({
+      name: (name || "").trim(),
+      phone: (phone || "").trim(),
+      email: (email || "").trim(),
+      notes: (notes || "").trim(),
+    })
+    .eq("id", customerId)
+    .eq("business_id", businessId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return toCustomer(data);
+}
+
+export async function getCustomerDetails(businessId, customerId) {
+  const client = requireSupabase();
+  const [{ data: customer, error: custError }, { data: sales, error: salesError }, { data: balance }] =
+    await Promise.all([
+      client.from("customers").select("*").eq("id", customerId).eq("business_id", businessId).single(),
+      client.from("sales").select("*, sale_items(*)").eq("customer_id", customerId).eq("business_id", businessId).order("created_at", { ascending: false }),
+      client.from("customer_balances").select("*").eq("customer_id", customerId).eq("business_id", businessId).maybeSingle(),
+    ]);
+
+  if (custError) throw custError;
+  if (salesError) throw salesError;
+
+  const purchases = (sales || []).map((s) => ({
+    id: s.id,
+    date: s.created_at,
+    total: Number(s.total || 0),
+    amountPaid: Number(s.amount_paid ?? s.total ?? 0),
+    paymentMethod: s.payment_method || "cash",
+    dueDate: s.due_date || null,
+    itemsCount: Array.isArray(s.sale_items) ? s.sale_items.length : 0,
+    items: (s.sale_items || []).map((item) => ({
+      name: item.name || item.product_name || "Item",
+      quantity: item.quantity,
+      price: item.price,
+    })),
+  }));
+
+  const totalOrders = purchases.length;
+  const lifetimeSpend = purchases.reduce((sum, p) => sum + p.total, 0);
+  const activeDebt = Number(balance?.total_debt || 0);
+
+  return {
+    customer: {
+      ...toCustomer(customer),
+      debt: activeDebt,
+    },
+    metrics: {
+      totalOrders,
+      lifetimeSpend,
+      activeDebt,
+    },
+    purchases,
+  };
+}
+
 export async function payCustomerDebt(businessId, customerId, amount, paymentMethod = "cash") {
   const { data, error } = await requireSupabase().rpc("pay_debt", {
     p_business_id: businessId,

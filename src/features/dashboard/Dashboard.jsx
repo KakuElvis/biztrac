@@ -7,6 +7,7 @@ import {
   ReceiptText,
   ShoppingCart,
   TrendingUp,
+  UsersRound,
   WalletCards,
 } from "lucide-react";
 import { Badge } from "../../components/common/Badge.jsx";
@@ -164,7 +165,7 @@ export function Dashboard({
               { label: "Create invoice", icon: ReceiptText, screen: "more" },
               { label: "Record expense", icon: WalletCards, screen: "expenses" },
               { label: "Stock in", icon: Boxes, screen: "inventory" },
-              { label: "Debtors list", icon: CreditCard, screen: "customers" },
+              { label: "Customers", icon: UsersRound, screen: "customers" },
             ].map((action) => (
               <button
                 key={action.label}

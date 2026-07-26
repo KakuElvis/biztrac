@@ -72,4 +72,22 @@ describe("Demo Repository Logic", () => {
     expect(result.sale.dueDate).toBe("2026-08-15");
     expect(result.sale.total).toBe(200);
   });
+
+  it("fetches customer details with financial metrics and purchases", async () => {
+    const details = await demoRepository.getCustomerDetails("demo", "1");
+    expect(details).toHaveProperty("customer");
+    expect(details).toHaveProperty("metrics");
+    expect(details).toHaveProperty("purchases");
+    expect(details.metrics).toHaveProperty("totalOrders");
+    expect(details.metrics).toHaveProperty("lifetimeSpend");
+  });
+
+  it("updates customer profile information", async () => {
+    const updated = await demoRepository.updateCustomer("demo", "1", {
+      name: "Kwame Asante Updated",
+      phone: "0249998877",
+    });
+    expect(updated.name).toBe("Kwame Asante Updated");
+    expect(updated.phone).toBe("0249998877");
+  });
 });

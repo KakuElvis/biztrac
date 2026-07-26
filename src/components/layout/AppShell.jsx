@@ -8,6 +8,7 @@ import {
   ReceiptText,
   Search,
   ShoppingCart,
+  UsersRound,
   WalletCards,
 } from "lucide-react";
 import { AppLogo } from "../../components/common/AppLogo.jsx";
@@ -17,6 +18,7 @@ const navItems = [
   { id: "dashboard", label: "Dashboard", icon: Home },
   { id: "sales", label: "Sales", icon: ShoppingCart },
   { id: "inventory", label: "Stock", icon: Boxes },
+  { id: "customers", label: "Customers", icon: UsersRound },
   { id: "reports", label: "Reports", icon: BarChart3 },
   { id: "more", label: "More", icon: Menu },
 ];
@@ -149,7 +151,7 @@ export function AppShell({
       </button>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] pt-2 backdrop-blur lg:hidden">
-        <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
+        <div className="mx-auto grid max-w-md grid-cols-6 gap-1">
           {navItems.map((item) => (
             <MobileNavButton
               key={item.id}

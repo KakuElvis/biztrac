@@ -112,6 +112,75 @@ export const demoRepository = {
     };
   },
 
+  async updateCustomer(_businessId, customerId, updates) {
+    const debtor = initialDebtors.find((d) => String(d.id) === String(customerId));
+    if (debtor) {
+      if (updates.name) debtor.name = updates.name.trim();
+      if (updates.phone !== undefined) debtor.phone = updates.phone.trim();
+    }
+    return {
+      id: customerId,
+      businessId: "demo",
+      name: (updates.name || debtor?.name || "Customer").trim(),
+      phone: (updates.phone ?? debtor?.phone ?? "").trim(),
+      email: (updates.email || "").trim(),
+      notes: (updates.notes || "").trim(),
+      debt: debtor ? debtor.amount : 0,
+    };
+  },
+
+  async getCustomerDetails(_businessId, customerId) {
+    const debtor = initialDebtors.find((d) => String(d.id) === String(customerId));
+    const activeDebt = debtor ? debtor.amount : 0;
+
+    const mockPurchases = [
+      {
+        id: "demo-sale-1",
+        date: new Date(Date.now() - 86400000 * 2).toISOString(),
+        total: 450,
+        amountPaid: activeDebt > 0 ? 0 : 450,
+        paymentMethod: activeDebt > 0 ? "credit" : "cash",
+        dueDate: debtor?.due || null,
+        itemsCount: 2,
+        items: [
+          { name: "Kente Weave Fabric", quantity: 2, price: 150 },
+          { name: "Beaded Necklace", quantity: 1, price: 150 },
+        ],
+      },
+      {
+        id: "demo-sale-2",
+        date: new Date(Date.now() - 86400000 * 14).toISOString(),
+        total: 280,
+        amountPaid: 280,
+        paymentMethod: "momo",
+        dueDate: null,
+        itemsCount: 1,
+        items: [{ name: "African Print Shirt", quantity: 2, price: 140 }],
+      },
+    ];
+
+    const totalOrders = mockPurchases.length;
+    const lifetimeSpend = mockPurchases.reduce((sum, p) => sum + p.total, 0);
+
+    return {
+      customer: {
+        id: customerId,
+        businessId: "demo",
+        name: debtor ? debtor.name : "Customer Profile",
+        phone: debtor?.phone || "0240000000",
+        email: "customer@example.com",
+        notes: "Regular SME client",
+        debt: activeDebt,
+      },
+      metrics: {
+        totalOrders,
+        lifetimeSpend,
+        activeDebt,
+      },
+      purchases: mockPurchases,
+    };
+  },
+
   async payCustomerDebt(_businessId, customerId, amount) {
     const debtor = initialDebtors.find((d) => String(d.id) === String(customerId));
     const previousDebt = debtor ? debtor.amount : 0;

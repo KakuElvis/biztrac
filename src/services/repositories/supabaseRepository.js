@@ -1,6 +1,6 @@
 import { listProducts, createProduct, updateProduct, deleteProduct } from "../productService.js";
 import { listCategories, createCategory } from "../categoryService.js";
-import { listCustomers, createCustomer, payCustomerDebt } from "../customerService.js";
+import { listCustomers, createCustomer, updateCustomer, getCustomerDetails, payCustomerDebt } from "../customerService.js";
 import { listExpenses, createExpense } from "../expenseService.js";
 import { getDashboardSummary } from "../dashboardService.js";
 import { getReportSummary } from "../reportService.js";
@@ -84,6 +84,14 @@ export const supabaseRepository = {
 
   async createCustomer(businessId, customer) {
     return createCustomer(businessId, customer);
+  },
+
+  async updateCustomer(businessId, customerId, updates) {
+    return updateCustomer(businessId, customerId, updates);
+  },
+
+  async getCustomerDetails(businessId, customerId) {
+    return getCustomerDetails(businessId, customerId);
   },
 
   async payCustomerDebt(businessId, customerId, amount, paymentMethod) {
