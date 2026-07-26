@@ -90,4 +90,28 @@ describe("Demo Repository Logic", () => {
     expect(updated.name).toBe("Kwame Asante Updated");
     expect(updated.phone).toBe("0249998877");
   });
+
+  it("restocks product and logs batch restock entry with price updates", async () => {
+    const all = await demoRepository.listProducts("demo");
+    const target = all[0];
+    const initialQty = target.quantity;
+
+    const res = await demoRepository.restockProduct("demo", target.id, {
+      quantityAdded: 15,
+      newCostPrice: 50,
+      newSellingPrice: 120,
+      supplierName: "Makola Wholesalers",
+      notes: "Batch #100",
+    });
+
+    expect(res).toHaveProperty("restock");
+    expect(res.restock.quantityAdded).toBe(15);
+    expect(res.restock.previousQuantity).toBe(initialQty);
+    expect(res.restock.newCostPrice).toBe(50);
+    expect(res.restock.supplierName).toBe("Makola Wholesalers");
+
+    const history = await demoRepository.listProductRestocks("demo", target.id);
+    expect(history.length).toBeGreaterThan(0);
+    expect(history[0].quantityAdded).toBe(15);
+  });
 });

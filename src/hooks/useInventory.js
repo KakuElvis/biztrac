@@ -187,6 +187,31 @@ export function useInventory(repository, businessId, isDemo) {
     return nextCategory;
   };
 
+  const handleRestockProduct = async (productId, restockData) => {
+    const res = await repository.restockProduct(businessId, productId, restockData);
+    setProducts((current) =>
+      current.map((item) => {
+        if (item.id === productId) {
+          const added = Number(restockData.quantityAdded);
+          const newCost = Number(restockData.newCostPrice);
+          const newSelling = Number(restockData.newSellingPrice);
+          return {
+            ...item,
+            quantity: item.quantity + added,
+            costPrice: !isNaN(newCost) && newCost > 0 ? newCost : item.costPrice,
+            sellingPrice: !isNaN(newSelling) && newSelling > 0 ? newSelling : item.sellingPrice,
+          };
+        }
+        return item;
+      })
+    );
+    return res;
+  };
+
+  const fetchProductRestocks = async (productId) => {
+    return repository.listProductRestocks(businessId, productId);
+  };
+
   const resetInventory = (demoProds = initialProducts) => {
     setProducts(isDemo ? demoProds : []);
     setCategories(isDemo ? categoriesFromProducts(demoProds) : []);
@@ -210,6 +235,8 @@ export function useInventory(repository, businessId, isDemo) {
     handleCreateProduct,
     handleUpdateProduct,
     handleDeleteProduct,
+    handleRestockProduct,
+    fetchProductRestocks,
     handleCreateCategory,
     resetInventory,
   };

@@ -7,6 +7,8 @@ import {
 import { getDemoDashboardSummary } from "../dashboardService.js";
 import { getDemoReportSummary } from "../reportService.js";
 
+const demoRestockLogs = new Map();
+
 function categoriesFromProducts(products) {
   return [...new Set(products.map((product) => product.category).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b))
@@ -82,6 +84,54 @@ export const demoRepository = {
 
   async deleteProduct() {
     return true;
+  },
+
+  async restockProduct(_businessId, productId, restockData) {
+    const { quantityAdded, newCostPrice, newSellingPrice, supplierName, notes } = restockData;
+    const prod = initialProducts.find((p) => String(p.id) === String(productId));
+    const prevQty = prod ? prod.quantity : 0;
+    const oldCost = prod ? prod.costPrice : 0;
+    const oldSelling = prod ? prod.sellingPrice : 0;
+    const added = Number(quantityAdded);
+
+    if (prod) {
+      prod.quantity = prevQty + added;
+      if (newCostPrice !== undefined && newCostPrice !== null && !isNaN(Number(newCostPrice))) {
+        prod.costPrice = Number(newCostPrice);
+      }
+      if (newSellingPrice !== undefined && newSellingPrice !== null && !isNaN(Number(newSellingPrice))) {
+        prod.sellingPrice = Number(newSellingPrice);
+      }
+    }
+
+    const logEntry = {
+      id: crypto.randomUUID(),
+      productId,
+      quantityAdded: added,
+      previousQuantity: prevQty,
+      newQuantity: prevQty + added,
+      oldCostPrice: oldCost,
+      newCostPrice: prod ? prod.costPrice : oldCost,
+      oldSellingPrice: oldSelling,
+      newSellingPrice: prod ? prod.sellingPrice : oldSelling,
+      supplierName: supplierName || "",
+      notes: notes || "",
+      createdAt: new Date().toISOString(),
+    };
+
+    if (!demoRestockLogs.has(String(productId))) {
+      demoRestockLogs.set(String(productId), []);
+    }
+    demoRestockLogs.get(String(productId)).unshift(logEntry);
+
+    return {
+      restock: logEntry,
+      updatedProduct: prod ? { ...prod } : null,
+    };
+  },
+
+  async listProductRestocks(_businessId, productId) {
+    return demoRestockLogs.get(String(productId)) || [];
   },
 
   async listCategories() {

@@ -117,3 +117,46 @@ export async function deleteProduct(businessId, productId) {
 
   if (error) throw error;
 }
+
+export async function restockProduct(businessId, productId, restockData) {
+  const { quantityAdded, newCostPrice, newSellingPrice, supplierName = "", notes = "" } = restockData;
+
+  const { data, error } = await requireSupabase().rpc("restock_product", {
+    p_business_id: businessId,
+    p_product_id: productId,
+    p_quantity_added: Number(quantityAdded),
+    p_new_cost_price: Number(newCostPrice),
+    p_new_selling_price: Number(newSellingPrice),
+    p_supplier_name: (supplierName || "").trim(),
+    p_notes: (notes || "").trim(),
+  });
+
+  if (error) throw error;
+  return data;
+}
+
+export async function listProductRestocks(businessId, productId) {
+  const { data, error } = await requireSupabase()
+    .from("product_restocks")
+    .select("*")
+    .eq("business_id", businessId)
+    .eq("product_id", productId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data || []).map((row) => ({
+    id: row.id,
+    productId: row.product_id,
+    quantityAdded: row.quantity_added,
+    previousQuantity: row.previous_quantity,
+    newQuantity: row.new_quantity,
+    oldCostPrice: Number(row.old_cost_price),
+    newCostPrice: Number(row.new_cost_price),
+    oldSellingPrice: Number(row.old_selling_price),
+    newSellingPrice: Number(row.new_selling_price),
+    supplierName: row.supplier_name || "",
+    notes: row.notes || "",
+    createdAt: row.created_at,
+  }));
+}

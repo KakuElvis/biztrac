@@ -67,6 +67,8 @@ export default function App() {
     handleCreateProduct,
     handleUpdateProduct,
     handleDeleteProduct,
+    handleRestockProduct,
+    fetchProductRestocks,
     handleCreateCategory,
     resetInventory,
   } = useInventory(repository, businessId, isDemo);
@@ -289,6 +291,8 @@ export default function App() {
           reportsLoading={reportsLoading}
           setProducts={setProducts}
           onUpdateProduct={handleUpdateProduct}
+          onRestockProduct={handleRestockProduct}
+          onFetchProductRestocks={fetchProductRestocks}
           onUpdateCustomer={handleUpdateCustomer}
           onFetchCustomerDetails={fetchCustomerDetails}
           onCreateCustomer={handleCreateCustomer}

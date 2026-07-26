@@ -1,4 +1,4 @@
-import { listProducts, createProduct, updateProduct, deleteProduct } from "../productService.js";
+import { listProducts, createProduct, updateProduct, deleteProduct, restockProduct, listProductRestocks } from "../productService.js";
 import { listCategories, createCategory } from "../categoryService.js";
 import { listCustomers, createCustomer, updateCustomer, getCustomerDetails, payCustomerDebt } from "../customerService.js";
 import { listExpenses, createExpense } from "../expenseService.js";
@@ -50,6 +50,14 @@ export const supabaseRepository = {
 
   async deleteProduct(businessId, productId) {
     return deleteProduct(businessId, productId);
+  },
+
+  async restockProduct(businessId, productId, restockData) {
+    return restockProduct(businessId, productId, restockData);
+  },
+
+  async listProductRestocks(businessId, productId) {
+    return listProductRestocks(businessId, productId);
   },
 
   async listCategories(businessId) {
