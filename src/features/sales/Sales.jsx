@@ -54,6 +54,12 @@ function buildReceiptText(receipt, business) {
     )
     .join("\n");
 
+  const isCreditOrPartial =
+    receipt.paymentType === "Credit" ||
+    (receipt.amountPaid !== undefined && receipt.amountPaid < receipt.total);
+  const amountPaid = receipt.amountPaid || 0;
+  const balanceDue = Math.max(0, receipt.total - amountPaid);
+
   return [
     businessName,
     businessDetails,
@@ -62,10 +68,13 @@ function buildReceiptText(receipt, business) {
     `Date: ${formatReceiptDate(receipt.createdAt)}`,
     `Customer: ${receipt.customerName || "Walk-in"}`,
     `Payment: ${receipt.paymentType}`,
+    receipt.dueDate ? `Credit Due Date: ${formatReceiptDate(receipt.dueDate)}` : "",
     "",
     lines,
     "",
     `Total: ${formatCurrency(receipt.total)}`,
+    isCreditOrPartial ? `Amount Paid: ${formatCurrency(amountPaid)}` : "",
+    isCreditOrPartial ? `Balance Due: ${formatCurrency(balanceDue)}` : "",
     "",
     "Thank you.",
   ]
@@ -90,6 +99,12 @@ function buildWhatsAppReceiptText(receipt, business) {
     .map((line) => `• *${line.name}* (x${line.quantity}) - ${formatCurrency(line.total)}`)
     .join("\n");
 
+  const isCreditOrPartial =
+    receipt.paymentType === "Credit" ||
+    (receipt.amountPaid !== undefined && receipt.amountPaid < receipt.total);
+  const amountPaid = receipt.amountPaid || 0;
+  const balanceDue = Math.max(0, receipt.total - amountPaid);
+
   const lines = [
     `🧾 *RECEIPT - ${businessName.toUpperCase()}*`,
     businessDetails ? `📍 ${businessDetails}` : "",
@@ -98,6 +113,7 @@ function buildWhatsAppReceiptText(receipt, business) {
     `📅 *Date:* ${formatReceiptDate(receipt.createdAt || new Date().toISOString())}`,
     `👤 *Customer:* ${receipt.customerName || "Walk-in"}`,
     `💳 *Payment:* ${receipt.paymentType || "Cash"}`,
+    receipt.dueDate ? `📆 *Due Date:* ${formatReceiptDate(receipt.dueDate)}` : "",
     `--------------------------------`,
     `*ITEMS:*`,
     lineItems,
@@ -105,8 +121,9 @@ function buildWhatsAppReceiptText(receipt, business) {
     `💰 *TOTAL:* ${formatCurrency(receipt.total)}`,
   ];
 
-  if (receipt.paymentType === "Credit") {
-    lines.push(`⚠️ *Remaining Balance:* ${formatCurrency(receipt.profit || 0)}`);
+  if (isCreditOrPartial) {
+    lines.push(`💵 *Amount Paid:* ${formatCurrency(amountPaid)}`);
+    lines.push(`⚠️ *Balance Due:* ${formatCurrency(balanceDue)}`);
   }
 
   lines.push("");
@@ -241,6 +258,12 @@ function buildReceiptHtml(receipt, business) {
     )
     .join("");
 
+  const isCreditOrPartial =
+    receipt.paymentType === "Credit" ||
+    (receipt.amountPaid !== undefined && receipt.amountPaid < receipt.total);
+  const amountPaid = receipt.amountPaid || 0;
+  const balanceDue = Math.max(0, receipt.total - amountPaid);
+
   return `
     <!doctype html>
     <html>
@@ -279,6 +302,7 @@ function buildReceiptHtml(receipt, business) {
           }
           .meta div,
           .total,
+          .sub-row,
           tr {
             display: flex;
             justify-content: space-between;
@@ -313,6 +337,10 @@ function buildReceiptHtml(receipt, business) {
             margin-top: 12px;
             padding-top: 12px;
           }
+          .sub-row {
+            font-size: 12px;
+            margin-top: 6px;
+          }
           .thanks {
             margin-top: 18px;
             text-align: center;
@@ -328,9 +356,18 @@ function buildReceiptHtml(receipt, business) {
             <div><span>Date</span><strong>${escapeHtml(formatReceiptDate(receipt.createdAt))}</strong></div>
             <div><span>Customer</span><strong>${escapeHtml(receipt.customerName || "Walk-in")}</strong></div>
             <div><span>Payment</span><strong>${escapeHtml(receipt.paymentType)}</strong></div>
+            ${receipt.dueDate ? `<div><span>Due Date</span><strong>${escapeHtml(formatReceiptDate(receipt.dueDate))}</strong></div>` : ""}
           </section>
           <table><tbody>${rows}</tbody></table>
           <div class="total"><span>Total</span><span>${escapeHtml(formatCurrency(receipt.total))}</span></div>
+          ${isCreditOrPartial ? `
+            <div class="sub-row" style="color: #027aec; font-weight: 700;">
+              <span>Amount Paid</span><span>${escapeHtml(formatCurrency(amountPaid))}</span>
+            </div>
+            <div class="sub-row" style="color: #dc2626; font-weight: 800;">
+              <span>Balance Due</span><span>${escapeHtml(formatCurrency(balanceDue))}</span>
+            </div>
+          ` : ""}
           <p class="thanks">Thank you.</p>
         </main>
       </body>
@@ -345,16 +382,22 @@ export function Sales({
   customersLoading,
   onCompleteSale,
   products = [],
+  queuedCount: propQueuedCount,
+  isSyncing: propIsSyncing,
+  onTriggerSync,
+  onRefreshQueueCount,
 }) {
   const [cart, setCart] = useState([]);
   const [actionError, setActionError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [queuedCount, setQueuedCount] = useState(0);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [localQueuedCount, setLocalQueuedCount] = useState(0);
+  const queuedCount = propQueuedCount !== undefined ? propQueuedCount : localQueuedCount;
+  const isSyncing = propIsSyncing !== undefined ? propIsSyncing : false;
   const [lastReceipt, setLastReceipt] = useState(null);
   const [paymentType, setPaymentType] = useState("MoMo");
   const [downPayment, setDownPayment] = useState("");
+  const [dueDate, setDueDate] = useState("");
   const [customerMode, setCustomerMode] = useState("walk-in");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [newCustomerName, setNewCustomerName] = useState("");
@@ -379,6 +422,8 @@ export function Sales({
         paymentType,
         total,
         profit,
+        amountPaid: paymentType === "Credit" && downPayment ? Number(downPayment) : 0,
+        dueDate: paymentType === "Credit" ? dueDate : null,
       }
     : lastReceipt;
 
@@ -410,13 +455,19 @@ export function Sales({
   const readQueueItems = useCallback(async () => {
     try {
       const queued = await getQueuedSales();
-      setQueuedCount(queued.length);
+      setLocalQueuedCount(queued.length);
+      if (onRefreshQueueCount) onRefreshQueueCount();
     } catch {
-      setQueuedCount(0);
+      setLocalQueuedCount(0);
     }
-  }, []);
+  }, [onRefreshQueueCount]);
 
   const flushOfflineQueue = useCallback(async () => {
+    if (onTriggerSync) {
+      await onTriggerSync();
+      await readQueueItems();
+      return;
+    }
     if (!onCompleteSale) return;
     try {
       const synced = await syncOfflineQueue((bId, payload) => onCompleteSale(payload));
@@ -426,7 +477,7 @@ export function Sales({
     } catch (err) {
       console.error("Error flushing offline queue", err);
     }
-  }, [onCompleteSale, readQueueItems]);
+  }, [onCompleteSale, readQueueItems, onTriggerSync]);
 
   useEffect(() => {
     const onOnline = () => flushOfflineQueue();
@@ -514,6 +565,7 @@ export function Sales({
         lines: cartLines,
         paymentType,
         amountPaid: parsedDownPayment,
+        dueDate: paymentType === "Credit" ? dueDate : null,
       });
       const receipt = {
         reference: sale.reference,
@@ -522,6 +574,8 @@ export function Sales({
         paymentType,
         total,
         profit,
+        amountPaid: parsedDownPayment,
+        dueDate: paymentType === "Credit" ? dueDate : null,
         createdAt: new Date().toISOString(),
       };
 
@@ -532,6 +586,7 @@ export function Sales({
       setNewCustomerName("");
       setNewCustomerPhone("");
       setDownPayment("");
+      setDueDate("");
       setSuccessMessage(`Sale ${sale.reference} recorded.`);
       showToast(`Sale ${sale.reference} recorded.`, { type: "success" });
       // clear success message after a short delay
@@ -576,12 +631,15 @@ export function Sales({
   };
 
   const syncNow = async () => {
-    setIsSyncing(true);
     try {
-      await flushOfflineQueue();
+      if (onTriggerSync) {
+        await onTriggerSync();
+      } else {
+        await flushOfflineQueue();
+      }
       await readQueueItems();
-    } finally {
-      setIsSyncing(false);
+    } catch (err) {
+      console.error("Error in syncNow", err);
     }
   };
 
@@ -795,7 +853,7 @@ export function Sales({
               <div className="mt-3 rounded-2xl border border-palm/30 bg-sky-50/50 p-3.5 space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-black uppercase tracking-wider text-palm">
-                    Partial Payment / Upfront Deposit
+                    Partial Payment & Credit Terms
                   </p>
                   <span className="text-[10px] font-bold rounded-full bg-palm/10 px-2 py-0.5 text-palm">
                     Credit Sale
@@ -818,6 +876,42 @@ export function Sales({
                   />
                 </div>
 
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-600">
+                      Credit Due Date
+                    </label>
+                    <span className="text-[10px] font-bold text-slate-400">Payment Deadline</span>
+                  </div>
+                  <input
+                    type="date"
+                    min={new Date().toISOString().slice(0, 10)}
+                    className="field mt-1 text-xs font-bold text-ink bg-white border-palm/40 focus:border-palm"
+                    value={dueDate}
+                    onChange={(event) => setDueDate(event.target.value)}
+                  />
+                  <div className="mt-1.5 flex gap-1.5 flex-wrap">
+                    {[
+                      { label: "+7 Days", days: 7 },
+                      { label: "+14 Days", days: 14 },
+                      { label: "+30 Days", days: 30 },
+                    ].map((preset) => (
+                      <button
+                        key={preset.days}
+                        type="button"
+                        className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-600 transition hover:border-palm hover:text-palm"
+                        onClick={() => {
+                          const d = new Date();
+                          d.setDate(d.getDate() + preset.days);
+                          setDueDate(d.toISOString().slice(0, 10));
+                        }}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="rounded-xl bg-white p-2.5 border border-slate-200/80 space-y-1 text-xs font-bold">
                   <div className="flex justify-between text-slate-500">
                     <span>Cart Total:</span>
@@ -831,6 +925,12 @@ export function Sales({
                     <span>Remaining Balance Owed:</span>
                     <span>{formatCurrency(Math.max(0, total - (Number(downPayment) || 0)))}</span>
                   </div>
+                  {dueDate ? (
+                    <div className="flex justify-between text-slate-600 font-bold border-t border-slate-100 pt-1">
+                      <span>Payment Due Date:</span>
+                      <span>{formatReceiptDate(dueDate)}</span>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -1005,15 +1105,33 @@ function ReceiptPreview({ business, receipt }) {
             </p>
           ) : null}
         </div>
-        <div className="mt-4 border-t border-dashed border-slate-200 pt-4">
+        <div className="mt-4 border-t border-dashed border-slate-200 pt-4 space-y-1.5">
           <div className="flex justify-between text-sm font-bold text-slate-500">
             <span>Estimated profit</span>
             <span>{formatCurrency(receipt?.profit || 0)}</span>
           </div>
-          <div className="mt-2 flex justify-between text-xl font-black text-ink">
+          <div className="flex justify-between text-xl font-black text-ink">
             <span>Total</span>
             <span>{formatCurrency(receipt?.total || 0)}</span>
           </div>
+          {receipt?.paymentType === "Credit" || (receipt?.amountPaid !== undefined && receipt?.amountPaid < receipt?.total) ? (
+            <>
+              <div className="flex justify-between text-xs font-bold text-palm pt-1 border-t border-slate-100">
+                <span>Amount Paid</span>
+                <span>{formatCurrency(receipt?.amountPaid || 0)}</span>
+              </div>
+              <div className="flex justify-between text-xs font-black text-red-600">
+                <span>Balance Due</span>
+                <span>{formatCurrency(Math.max(0, (receipt?.total || 0) - (receipt?.amountPaid || 0)))}</span>
+              </div>
+              {receipt?.dueDate ? (
+                <div className="flex justify-between text-xs font-semibold text-slate-500 pt-1 border-t border-slate-100">
+                  <span>Credit Due Date</span>
+                  <span>{formatReceiptDate(receipt.dueDate)}</span>
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </div>
       </div>
     </div>

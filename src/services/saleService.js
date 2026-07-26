@@ -39,6 +39,7 @@ function toSale(row) {
     discount: toNumber(row.discount),
     total: toNumber(row.total),
     amountPaid: toNumber(row.amount_paid),
+    dueDate: row.due_date || null,
     soldAt: row.sold_at,
   };
 }
@@ -59,7 +60,7 @@ function validateLines(lines) {
   });
 }
 
-export async function createSale(businessId, { customer, lines, paymentType, amountPaid }) {
+export async function createSale(businessId, { customer, lines, paymentType, amountPaid, dueDate }) {
   validateLines(lines);
 
   const paymentMethod = toPaymentMethod(paymentType);
@@ -83,6 +84,7 @@ export async function createSale(businessId, { customer, lines, paymentType, amo
     p_notes: null,
     p_payment_method: paymentMethod,
     p_amount_paid: amountPaid !== undefined && amountPaid !== null ? Number(amountPaid) : null,
+    p_due_date: dueDate || null,
   });
 
   if (error) throw error;

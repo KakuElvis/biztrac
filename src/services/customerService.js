@@ -20,14 +20,23 @@ export function toCustomer(row) {
 }
 
 export async function listCustomers(businessId) {
-  const { data, error } = await requireSupabase()
-    .from("customers")
-    .select("*")
-    .eq("business_id", businessId)
-    .order("name");
+  const client = requireSupabase();
+  const [{ data: customers, error: custError }, { data: balances }] =
+    await Promise.all([
+      client.from("customers").select("*").eq("business_id", businessId).order("name"),
+      client.from("customer_balances").select("*").eq("business_id", businessId),
+    ]);
 
-  if (error) throw error;
-  return data.map(toCustomer);
+  if (custError) throw custError;
+
+  const balanceMap = new Map(
+    (balances || []).map((b) => [b.customer_id, Number(b.total_debt || 0)])
+  );
+
+  return (customers || []).map((c) => ({
+    ...toCustomer(c),
+    debt: balanceMap.get(c.id) || 0,
+  }));
 }
 
 export async function createCustomer(businessId, { name, phone = "", email = "", notes = "" }) {

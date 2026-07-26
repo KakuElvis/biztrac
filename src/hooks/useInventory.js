@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { showToast } from "../lib/toast.js";
 import { products as initialProducts } from "../lib/mockData.js";
+import { supabase } from "../lib/supabase.js";
+import { toProduct } from "../services/productService.js";
 
 function categoriesFromProducts(products) {
   return [...new Set(products.map((product) => product.category).filter(Boolean))]
@@ -16,6 +18,15 @@ export function useInventory(repository, businessId, isDemo) {
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [categoriesError, setCategoriesError] = useState("");
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [totalCount, setTotalCount] = useState(0);
+
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(totalCount / (pageSize || 50))),
+    [totalCount, pageSize]
+  );
+
   const lowStockCount = useMemo(
     () => products.filter((product) => product.quantity <= product.lowStockLimit).length,
     [products]
@@ -26,6 +37,7 @@ export function useInventory(repository, businessId, isDemo) {
 
     if (isDemo) {
       setProducts(initialProducts);
+      setTotalCount(initialProducts.length);
       setProductsError("");
       setProductsLoading(false);
       return undefined;
@@ -33,6 +45,7 @@ export function useInventory(repository, businessId, isDemo) {
 
     if (!businessId) {
       setProducts([]);
+      setTotalCount(0);
       return undefined;
     }
 
@@ -40,9 +53,17 @@ export function useInventory(repository, businessId, isDemo) {
     setProductsError("");
 
     repository
-      .listProducts(businessId)
-      .then((nextProducts) => {
-        if (isMounted) setProducts(nextProducts);
+      .listProducts(businessId, { page, pageSize })
+      .then((nextResult) => {
+        if (isMounted) {
+          if (Array.isArray(nextResult)) {
+            setProducts(nextResult);
+            setTotalCount(nextResult.length);
+          } else if (nextResult?.data) {
+            setProducts(nextResult.data);
+            setTotalCount(nextResult.totalCount ?? nextResult.data.length);
+          }
+        }
       })
       .catch((error) => {
         console.error("Unable to load products", error);
@@ -56,7 +77,47 @@ export function useInventory(repository, businessId, isDemo) {
     return () => {
       isMounted = false;
     };
-  }, [isDemo, businessId, repository]);
+  }, [isDemo, businessId, repository, page, pageSize]);
+
+  useEffect(() => {
+    if (isDemo || !businessId || !supabase) return undefined;
+
+    const channel = supabase
+      .channel(`products-realtime:${businessId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "products",
+          filter: `business_id=eq.${businessId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            const newProduct = toProduct(payload.new);
+            setProducts((current) => {
+              if (current.some((item) => item.id === newProduct.id)) return current;
+              return [newProduct, ...current].sort((a, b) => a.name.localeCompare(b.name));
+            });
+          } else if (payload.eventType === "UPDATE") {
+            const updatedProduct = toProduct(payload.new);
+            setProducts((current) =>
+              current.map((item) => (item.id === updatedProduct.id ? updatedProduct : item))
+            );
+          } else if (payload.eventType === "DELETE") {
+            const deletedId = payload.old?.id;
+            if (deletedId) {
+              setProducts((current) => current.filter((item) => item.id !== deletedId));
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isDemo, businessId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -140,6 +201,12 @@ export function useInventory(repository, businessId, isDemo) {
     categoriesLoading,
     categoriesError,
     lowStockCount,
+    page,
+    pageSize,
+    totalCount,
+    totalPages,
+    setPage,
+    setPageSize,
     handleCreateProduct,
     handleUpdateProduct,
     handleDeleteProduct,

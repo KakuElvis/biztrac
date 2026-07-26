@@ -18,15 +18,24 @@ import {
 export const supabaseRepository = {
   isDemo: false,
 
-  async listProducts(businessId) {
+  async listProducts(businessId, options) {
     try {
-      const products = await listProducts(businessId);
-      cacheLocalProducts(products);
-      return products;
+      const result = await listProducts(businessId, options);
+      if (Array.isArray(result)) {
+        cacheLocalProducts(result);
+      } else if (result?.data) {
+        cacheLocalProducts(result.data);
+      }
+      return result;
     } catch (error) {
       console.warn("[supabaseRepository] Fetching products failed, attempting local cache", error);
       const cached = await getLocalProducts();
-      if (cached.length) return cached;
+      if (cached.length) {
+        if (options?.page && options?.pageSize) {
+          return { data: cached, totalCount: cached.length };
+        }
+        return cached;
+      }
       throw error;
     }
   },
@@ -97,8 +106,8 @@ export const supabaseRepository = {
     return getReportSummary(businessId, options);
   },
 
-  async completeSale(businessId, { customer, lines, paymentType, amountPaid }) {
-    return createSale(businessId, { customer, lines, paymentType, amountPaid });
+  async completeSale(businessId, { customer, lines, paymentType, amountPaid, dueDate }) {
+    return createSale(businessId, { customer, lines, paymentType, amountPaid, dueDate });
   },
 
   async updateBusiness(businessId, nextBusiness) {

@@ -43,7 +43,7 @@ export function useAuthSession() {
   useEffect(() => {
     let isMounted = true;
 
-    if (!session?.user) {
+    if (!session?.user || isDemo) {
       setWorkspace(null);
       setWorkspaceLoading(false);
       return undefined;
@@ -55,8 +55,7 @@ export function useAuthSession() {
         if (isMounted) setWorkspace(nextWorkspace);
       })
       .catch((error) => {
-        console.error("Unable to load workspace", error);
-        showToast("Unable to load workspace");
+        console.warn("[useAuthSession] Unable to load workspace:", error?.message || error);
         if (isMounted) setWorkspace(null);
       })
       .finally(() => {
@@ -66,7 +65,7 @@ export function useAuthSession() {
     return () => {
       isMounted = false;
     };
-  }, [session]);
+  }, [session, isDemo]);
 
   const business = useMemo(() => {
     if (isDemo) return demoBusinessProfile;

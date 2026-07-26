@@ -47,8 +47,29 @@ export const demoRepository = {
     return { ...demoBusiness };
   },
 
-  async listProducts() {
-    return [...initialProducts];
+  async listProducts(_businessId, options) {
+    let prods = [...initialProducts];
+    if (options?.category) {
+      prods = prods.filter((p) => p.category === options.category);
+    }
+    if (options?.search) {
+      const q = options.search.toLowerCase();
+      prods = prods.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.sku.toLowerCase().includes(q) ||
+          p.brand.toLowerCase().includes(q)
+      );
+    }
+    if (options?.page && options?.pageSize) {
+      const start = (options.page - 1) * options.pageSize;
+      const end = start + options.pageSize;
+      return {
+        data: prods.slice(start, end),
+        totalCount: prods.length,
+      };
+    }
+    return prods;
   },
 
   async createProduct(_businessId, product) {
@@ -91,8 +112,18 @@ export const demoRepository = {
     };
   },
 
-  async payCustomerDebt(_businessId, _customerId, amount) {
-    return Number(amount);
+  async payCustomerDebt(_businessId, customerId, amount) {
+    const debtor = initialDebtors.find((d) => String(d.id) === String(customerId));
+    const previousDebt = debtor ? debtor.amount : 0;
+    const appliedAmount = Math.min(previousDebt || Number(amount), Number(amount));
+    if (debtor) {
+      debtor.amount = Math.max(0, debtor.amount - appliedAmount);
+    }
+    return {
+      appliedAmount,
+      previousDebt,
+      remainingDebt: debtor ? debtor.amount : 0,
+    };
   },
 
   async listExpenses() {
@@ -117,7 +148,7 @@ export const demoRepository = {
     return getDemoReportSummary(products);
   },
 
-  async completeSale({ customer, lines, currentProducts }) {
+  async completeSale({ customer, lines, currentProducts, paymentType, amountPaid, dueDate }) {
     const updatedProducts = currentProducts.map((product) => {
       const line = lines.find((item) => item.product.id === product.id);
       if (!line) return product;
@@ -141,10 +172,26 @@ export const demoRepository = {
       };
     }
 
+    const reference = `BT-${Math.floor(1000 + Math.random() * 9000)}`;
+    const total = lines.reduce((sum, line) => sum + (line.total || 0), 0);
+    const parsedAmountPaid =
+      amountPaid !== undefined && amountPaid !== null
+        ? Number(amountPaid)
+        : paymentType === "Credit"
+        ? 0
+        : total;
+
     return {
-      reference: `BT-${Math.floor(1000 + Math.random() * 9000)}`,
+      reference,
       updatedProducts,
       newCustomer,
+      sale: {
+        reference,
+        paymentMethod: paymentType || "Cash",
+        total,
+        amountPaid: parsedAmountPaid,
+        dueDate: dueDate || null,
+      },
     };
   },
 

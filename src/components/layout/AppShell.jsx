@@ -29,6 +29,9 @@ export function AppShell({
   onNavigate,
   lowStockCount,
   onSignOut,
+  queuedCount = 0,
+  isSyncing = false,
+  onTriggerSync,
 }) {
   return (
     <div className="min-h-screen pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-0">
@@ -107,6 +110,29 @@ export function AppShell({
           {!isOnline ? (
             <div className="screen-pad mx-auto max-w-5xl rounded-3xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 shadow-sm sm:mb-4">
               You are offline. Core app pages are available, but new data may not sync until you reconnect.
+            </div>
+          ) : null}
+
+          {queuedCount > 0 ? (
+            <div className="screen-pad mx-auto flex max-w-5xl items-center justify-between gap-3 rounded-3xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-900 shadow-sm sm:mb-4">
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 min-w-6 place-items-center rounded-full bg-sky-600 px-1 text-xs font-black text-white">
+                  {queuedCount}
+                </span>
+                <span>
+                  {queuedCount === 1 ? "1 offline sale queued." : `${queuedCount} offline sales queued.`}
+                  {isOnline ? (isSyncing ? " Syncing automatically..." : " Ready to sync.") : " Reconnect to sync."}
+                </span>
+              </div>
+              {isOnline && onTriggerSync ? (
+                <button
+                  onClick={onTriggerSync}
+                  disabled={isSyncing}
+                  className="rounded-xl bg-sky-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-sky-700 disabled:opacity-50"
+                >
+                  {isSyncing ? "Syncing..." : "Sync Now"}
+                </button>
+              ) : null}
             </div>
           ) : null}
 

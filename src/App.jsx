@@ -1,4 +1,4 @@
-import { useEffect, useState, Suspense, lazy } from "react";
+import { useEffect, useState, useCallback, Suspense, lazy } from "react";
 import { AppLogo } from "./components/common/AppLogo.jsx";
 import { AppShell } from "./components/layout/AppShell.jsx";
 import { AuthScreen, PasswordRecoveryScreen } from "./features/auth/AuthScreen.jsx";
@@ -8,6 +8,7 @@ import { useInventory } from "./hooks/useInventory.js";
 import { useCustomers } from "./hooks/useCustomers.js";
 import { useExpenses } from "./hooks/useExpenses.js";
 import { useAnalytics } from "./hooks/useAnalytics.js";
+import { useOfflineSync } from "./hooks/useOfflineSync.js";
 
 const Dashboard = lazy(() => import("./features/dashboard/Dashboard.jsx").then((m) => ({ default: m.Dashboard || m.default })));
 const Inventory = lazy(() => import("./features/inventory/Inventory.jsx").then((m) => ({ default: m.Inventory || m.default })));
@@ -57,6 +58,12 @@ export default function App() {
     categoriesLoading,
     categoriesError,
     lowStockCount,
+    page,
+    pageSize,
+    totalCount,
+    totalPages,
+    setPage,
+    setPageSize,
     handleCreateProduct,
     handleUpdateProduct,
     handleDeleteProduct,
@@ -136,18 +143,31 @@ export default function App() {
     await repository.updateBusiness(workspace.business.id, nextBusiness);
   };
 
-  const handleCompleteSale = async ({ customer, lines, paymentType }) => {
+  const handleCompleteSale = async ({ customer, lines, paymentType, amountPaid, dueDate }) => {
     if (isDemo) {
-      const result = await repository.completeSale({ customer, lines, currentProducts: products });
+      const result = await repository.completeSale({
+        customer,
+        lines,
+        currentProducts: products,
+        paymentType,
+        amountPaid,
+        dueDate,
+      });
       setProducts(result.updatedProducts);
       if (result.newCustomer) {
         setCustomers((current) => [...current, result.newCustomer]);
       }
       await refreshAnalytics();
-      return { reference: result.reference };
+      return { reference: result.reference, sale: result.sale };
     }
 
-    const result = await repository.completeSale(businessId, { customer, lines, paymentType });
+    const result = await repository.completeSale(businessId, {
+      customer,
+      lines,
+      paymentType,
+      amountPaid,
+      dueDate,
+    });
 
     setProducts((current) =>
       current.map((product) => {
@@ -170,8 +190,26 @@ export default function App() {
 
     await refreshAnalytics(businessId);
 
-    return { reference: result.sale.reference };
+    return { reference: result.sale.reference, sale: result.sale };
   };
+
+  const handleSyncComplete = useCallback(async () => {
+    try {
+      const updatedProducts = await repository.listProducts(businessId);
+      if (Array.isArray(updatedProducts)) {
+        setProducts(updatedProducts);
+      }
+    } catch {
+      // Ignore background refetch error
+    }
+    await refreshAnalytics(businessId);
+  }, [repository, businessId, setProducts, refreshAnalytics]);
+
+  const { queuedCount, isSyncing, refreshQueueCount, triggerSync } = useOfflineSync(
+    handleCompleteSale,
+    isOnline,
+    handleSyncComplete
+  );
 
   if (isLoading || (session && workspaceLoading)) {
     return (
@@ -207,6 +245,9 @@ export default function App() {
       isOnline={isOnline}
       onNavigate={setActiveScreen}
       onSignOut={handleSignOut}
+      queuedCount={queuedCount}
+      isSyncing={isSyncing}
+      onTriggerSync={triggerSync}
     >
       <Suspense fallback={<div className="p-6">Loading…</div>}>
         <Screen
@@ -250,6 +291,16 @@ export default function App() {
           onPayDebt={handlePayDebt}
           onNavigate={setActiveScreen}
           onSignOut={handleSignOut}
+          queuedCount={queuedCount}
+          isSyncing={isSyncing}
+          onTriggerSync={triggerSync}
+          onRefreshQueueCount={refreshQueueCount}
+          page={page}
+          pageSize={pageSize}
+          totalCount={totalCount}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
         />
       </Suspense>
     </AppShell>

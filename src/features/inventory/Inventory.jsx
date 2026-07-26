@@ -1,9 +1,12 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AlertCircle,
   AlertTriangle,
   Boxes,
   Camera,
+  ChevronLeft,
+  ChevronRight,
   Edit3,
   Loader2,
   Minus,
@@ -28,9 +31,15 @@ export function Inventory({
   onCreateCategory,
   onDeleteProduct,
   onUpdateProduct,
-  products,
+  products = [],
   productsError,
   productsLoading,
+  page = 1,
+  pageSize = 50,
+  totalCount = products.length,
+  totalPages = 1,
+  onPageChange,
+  onPageSizeChange,
 }) {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
@@ -176,19 +185,34 @@ export function Inventory({
           onCreate={openCreateForm}
         />
       ) : (
-        <section className="grid gap-4 md:grid-cols-2">
-          {filteredProducts.map((product) => (
-            <ProductCard
-              canDelete={canDeleteProducts}
-              isPending={pendingProductId === product.id}
-              key={product.id}
-              onAdjust={adjustStock}
-              onDelete={removeProduct}
-              onEdit={openEditForm}
-              product={product}
-            />
-          ))}
-        </section>
+        <div className="space-y-4">
+          <PaginationBar
+            page={page}
+            pageSize={pageSize}
+            totalCount={totalCount}
+            totalPages={totalPages}
+            onPageChange={onPageChange}
+            onPageSizeChange={onPageSizeChange}
+          />
+
+          <VirtualizedProductGrid
+            products={filteredProducts}
+            canDeleteProducts={canDeleteProducts}
+            pendingProductId={pendingProductId}
+            adjustStock={adjustStock}
+            removeProduct={removeProduct}
+            openEditForm={openEditForm}
+          />
+
+          <PaginationBar
+            page={page}
+            pageSize={pageSize}
+            totalCount={totalCount}
+            totalPages={totalPages}
+            onPageChange={onPageChange}
+            onPageSizeChange={onPageSizeChange}
+          />
+        </div>
       )}
 
       {isFormOpen && (
@@ -631,6 +655,129 @@ function TextField({ form, label, name, setField }) {
         onChange={(event) => setField(name, event.target.value)}
       />
     </FormField>
+  );
+}
+
+function VirtualizedProductGrid({
+  products,
+  canDeleteProducts,
+  pendingProductId,
+  adjustStock,
+  removeProduct,
+  openEditForm,
+}) {
+  const parentRef = useRef(null);
+
+  const rowVirtualizer = useVirtualizer({
+    count: products.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 180,
+    overscan: 5,
+  });
+
+  return (
+    <div
+      ref={parentRef}
+      className="max-h-[70vh] overflow-y-auto pr-1"
+    >
+      <div
+        style={{
+          height: `${rowVirtualizer.getTotalSize()}px`,
+          width: "100%",
+          position: "relative",
+        }}
+      >
+        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+          const product = products[virtualRow.index];
+          if (!product) return null;
+          return (
+            <div
+              key={product.id}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: `${virtualRow.size}px`,
+                transform: `translateY(${virtualRow.start}px)`,
+              }}
+              className="pb-4"
+            >
+              <ProductCard
+                canDelete={canDeleteProducts}
+                isPending={pendingProductId === product.id}
+                onAdjust={adjustStock}
+                onDelete={removeProduct}
+                onEdit={openEditForm}
+                product={product}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PaginationBar({
+  page = 1,
+  pageSize = 50,
+  totalCount = 0,
+  totalPages = 1,
+  onPageChange,
+  onPageSizeChange,
+}) {
+  if (!onPageChange) return null;
+
+  const startItem = totalCount > 0 ? (page - 1) * pageSize + 1 : 0;
+  const endItem = Math.min(page * pageSize, totalCount);
+
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="text-xs font-semibold text-slate-500">
+        Showing <span className="font-bold text-ink">{startItem}</span> to{" "}
+        <span className="font-bold text-ink">{endItem}</span> of{" "}
+        <span className="font-bold text-ink">{totalCount}</span> products
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+          <span>Per page:</span>
+          <select
+            className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-bold text-ink focus:border-palm focus:outline-none"
+            value={pageSize}
+            onChange={(e) => {
+              onPageSizeChange?.(Number(e.target.value));
+              onPageChange?.(1);
+            }}
+          >
+            <option value={20}>20</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            className="icon-button h-8 w-8 disabled:opacity-40"
+            disabled={page <= 1}
+            onClick={() => onPageChange(page - 1)}
+            aria-label="Previous page"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="px-2 text-xs font-bold text-ink">
+            Page {page} of {totalPages}
+          </span>
+          <button
+            className="icon-button h-8 w-8 disabled:opacity-40"
+            disabled={page >= totalPages}
+            onClick={() => onPageChange(page + 1)}
+            aria-label="Next page"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

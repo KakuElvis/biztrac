@@ -8,7 +8,7 @@ function requireSupabase() {
   return supabase;
 }
 
-function toProduct(row) {
+export function toProduct(row) {
   return {
     id: row.id,
     businessId: row.business_id,
@@ -44,15 +44,44 @@ function toProductRow(product) {
   };
 }
 
-export async function listProducts(businessId) {
-  const { data, error } = await requireSupabase()
+export async function listProducts(businessId, options = {}) {
+  const { page, pageSize, search, category } = options;
+
+  let query = requireSupabase()
     .from("products")
-    .select("*")
-    .eq("business_id", businessId)
-    .order("name");
+    .select("*", { count: "exact" })
+    .eq("business_id", businessId);
+
+  if (category && category.trim()) {
+    query = query.eq("category", category.trim());
+  }
+
+  if (search && search.trim()) {
+    const s = `%${search.trim()}%`;
+    query = query.or(`name.ilike.${s},sku.ilike.${s},brand.ilike.${s}`);
+  }
+
+  query = query.order("name");
+
+  if (typeof page === "number" && typeof pageSize === "number" && page > 0 && pageSize > 0) {
+    const from = (page - 1) * pageSize;
+    const to = page * pageSize - 1;
+    query = query.range(from, to);
+  }
+
+  const { data, count, error } = await query;
 
   if (error) throw error;
-  return data.map(toProduct);
+  const products = (data || []).map(toProduct);
+
+  if (page && pageSize) {
+    return {
+      data: products,
+      totalCount: count ?? products.length,
+    };
+  }
+
+  return products;
 }
 
 export async function createProduct(businessId, product) {

@@ -10,6 +10,8 @@ function customersFromDebtors(debtors) {
     phone: "",
     email: "",
     notes: "",
+    debt: debtor.amount || 0,
+    due: debtor.due || "",
   }));
 }
 
@@ -66,11 +68,21 @@ export function useCustomers(repository, businessId, isDemo, refreshAnalytics) {
   };
 
   const handlePayDebt = async (customerId, amount, paymentMethod) => {
-    const applied = await repository.payCustomerDebt(businessId, customerId, amount, paymentMethod);
+    const res = await repository.payCustomerDebt(businessId, customerId, amount, paymentMethod);
+    const applied = typeof res === "object" ? res.appliedAmount : Number(res || amount);
+    setCustomers((current) =>
+      current.map((c) => {
+        if (String(c.id) === String(customerId)) {
+          const newDebt = Math.max(0, (c.debt || 0) - applied);
+          return { ...c, debt: newDebt };
+        }
+        return c;
+      })
+    );
     if (!isDemo && businessId) {
       refreshAnalytics?.(businessId);
     }
-    return applied;
+    return res;
   };
 
   const resetCustomers = (demoDebtors = initialDebtors) => {
