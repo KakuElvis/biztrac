@@ -17,9 +17,11 @@ const Expenses = lazy(() => import("./features/expenses/Expenses.jsx").then((m) 
 const Reports = lazy(() => import("./features/reports/Reports.jsx").then((m) => ({ default: m.Reports || m.default })));
 const More = lazy(() => import("./features/settings/More.jsx").then((m) => ({ default: m.More || m.default })));
 const Customers = lazy(() => import("./features/customers/Customers.jsx").then((m) => ({ default: m.Customers || m.default })));
+const AIPage = lazy(() => import("./features/ai/AIPage.jsx").then((m) => ({ default: m.AIPage || m.default })));
 
 const screens = {
   dashboard: Dashboard,
+  ai: AIPage,
   customers: Customers,
   sales: Sales,
   inventory: Inventory,
@@ -44,7 +46,13 @@ export default function App() {
   } = useAuthSession();
 
   const [activeScreen, setActiveScreen] = useState("dashboard");
+  const [initialAiPrompt, setInitialAiPrompt] = useState(null);
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+
+  const handleNavigateToAI = useCallback((promptText = null) => {
+    setInitialAiPrompt(promptText);
+    setActiveScreen("ai");
+  }, []);
 
   const businessId = workspace?.business?.id;
   const repository = getRepository(isDemo);
@@ -300,6 +308,8 @@ export default function App() {
           onCreateCustomer={handleCreateCustomer}
           onPayDebt={handlePayDebt}
           onNavigate={setActiveScreen}
+          onNavigateToAI={handleNavigateToAI}
+          initialPrompt={initialAiPrompt}
           onSignOut={handleSignOut}
           queuedCount={queuedCount}
           isSyncing={isSyncing}

@@ -17,6 +17,7 @@ import {
   Clock,
   Loader2,
   ArrowUpRight,
+  Sparkles,
 } from "lucide-react";
 import { showToast } from "../../lib/toast.js";
 import { formatCurrency } from "../../lib/formatters.js";
@@ -128,6 +129,7 @@ export function Customers({
   onFetchCustomerDetails,
   onPayDebt,
   onNavigate,
+  onNavigateToAI,
   initialFilterTab = "all",
 }) {
   const [showForm, setShowForm] = useState(false);
@@ -420,6 +422,14 @@ export function Customers({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:border-palm/40 hover:text-palm"
+            onClick={() => onNavigateToAI?.("Who owes me money and what is the total debt?")}
+          >
+            <Sparkles className="h-4 w-4 text-palm" />
+            <span>Analyze Debts</span>
+          </button>
           <button
             className="flex items-center gap-2 rounded-2xl bg-palm px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:bg-palm/90"
             onClick={() => setShowForm((s) => !s)}

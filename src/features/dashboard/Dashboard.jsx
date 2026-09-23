@@ -6,6 +6,7 @@ import {
   Loader2,
   ReceiptText,
   ShoppingCart,
+  Sparkles,
   TrendingUp,
   UsersRound,
   WalletCards,
@@ -13,6 +14,7 @@ import {
 import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
 import { MetricCard } from "../../components/cards/MetricCard.jsx";
+import { AIInsightsPanel } from "../../components/ai/AIInsightsPanel.jsx";
 import { emptyDashboardSummary } from "../../services/dashboardService.js";
 import { formatCompactCurrency, formatCurrency } from "../../lib/formatters.js";
 
@@ -56,7 +58,10 @@ export function Dashboard({
   dashboardSummary = emptyDashboardSummary,
   products = [],
   productsLoading,
+  customers = [],
+  expenses = [],
   onNavigate,
+  onNavigateToAI,
 }) {
   const summary = dashboardSummary || emptyDashboardSummary;
   const ownerName = business?.owner || "there";
@@ -150,6 +155,13 @@ export function Dashboard({
           trend="down"
         />
       </section>
+
+      <AIInsightsPanel
+        products={products}
+        customers={customers}
+        expenses={expenses}
+        onNavigateToAI={onNavigateToAI || onNavigate}
+      />
 
       <section className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="panel p-4 sm:p-5">

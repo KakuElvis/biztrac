@@ -8,6 +8,7 @@ import {
   ReceiptText,
   Search,
   ShoppingCart,
+  Sparkles,
   UsersRound,
   WalletCards,
 } from "lucide-react";
@@ -16,6 +17,7 @@ import { classNames } from "../../lib/formatters.js";
 
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: Home },
+  { id: "ai", label: "BizTrac AI", icon: Sparkles },
   { id: "sales", label: "Sales", icon: ShoppingCart },
   { id: "inventory", label: "Stock", icon: Boxes },
   { id: "customers", label: "Customers", icon: UsersRound },

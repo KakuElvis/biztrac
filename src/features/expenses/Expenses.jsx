@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { showToast } from "../../lib/toast.js";
-import { AlertCircle, CalendarDays, CreditCard, Loader2, Plus, WalletCards } from "lucide-react";
+import { AlertCircle, CalendarDays, CreditCard, Loader2, Plus, Sparkles, WalletCards } from "lucide-react";
 import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
 import { expenseCategories } from "../../lib/expenseCategories.js";
@@ -47,6 +47,7 @@ export function Expenses({
   expensesError,
   expensesLoading,
   onCreateExpense,
+  onNavigateToAI,
 }) {
   const [form, setForm] = useState(initialForm);
   const [actionError, setActionError] = useState("");
@@ -100,9 +101,19 @@ export function Expenses({
           <p className="text-sm font-bold text-palm">Expenses</p>
           <h1 className="mt-1 text-3xl font-black tracking-normal text-ink">Money out</h1>
         </div>
-        <Button icon={Plus} type="button">
-          Record expense
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            icon={Sparkles}
+            variant="secondary"
+            type="button"
+            onClick={() => onNavigateToAI?.("What are my biggest expenses this month?")}
+          >
+            Analyze Expenses
+          </Button>
+          <Button icon={Plus} type="button">
+            Record expense
+          </Button>
+        </div>
       </section>
 
       {expensesError ? (

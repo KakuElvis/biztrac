@@ -13,6 +13,7 @@ import {
   PackagePlus,
   Plus,
   Search,
+  Sparkles,
   Tags,
   Trash2,
   X,
@@ -43,6 +44,7 @@ export function Inventory({
   productsLoading,
   page = 1,
   pageSize = 50,
+  onNavigateToAI,
   totalCount = products.length,
   totalPages = 1,
   onPageChange,
@@ -169,6 +171,13 @@ export function Inventory({
           <h1 className="mt-1 text-3xl font-black tracking-normal text-ink">Products</h1>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            icon={Sparkles}
+            variant="secondary"
+            onClick={() => onNavigateToAI?.("Which products are running low on stock right now?")}
+          >
+            Ask AI
+          </Button>
           <Button
             icon={PackagePlus}
             variant="secondary"

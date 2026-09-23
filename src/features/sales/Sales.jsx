@@ -10,6 +10,7 @@ import {
   ReceiptText,
   Send,
   ShoppingBag,
+  Sparkles,
   Trash2,
   UserPlus,
 } from "lucide-react";
@@ -386,6 +387,7 @@ export function Sales({
   isSyncing: propIsSyncing,
   onTriggerSync,
   onRefreshQueueCount,
+  onNavigateToAI,
 }) {
   const [cart, setCart] = useState([]);
   const [actionError, setActionError] = useState("");
@@ -743,18 +745,28 @@ export function Sales({
           <p className="text-sm font-bold text-palm">Sales</p>
           <h1 className="mt-1 text-3xl font-black tracking-normal text-ink">New sale</h1>
         </div>
-        <Button
-          icon={UserPlus}
-          variant="secondary"
-          type="button"
-          onClick={() => {
-            setCustomerMode("new");
-            setActionError("");
-            setSuccessMessage("");
-          }}
-        >
-          Add customer
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            icon={Sparkles}
+            variant="secondary"
+            type="button"
+            onClick={() => onNavigateToAI?.("Which products sold the most this month?")}
+          >
+            Analyze Sales
+          </Button>
+          <Button
+            icon={UserPlus}
+            variant="secondary"
+            type="button"
+            onClick={() => {
+              setCustomerMode("new");
+              setActionError("");
+              setSuccessMessage("");
+            }}
+          >
+            Add customer
+          </Button>
+        </div>
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[1fr_24rem]">
