@@ -52,6 +52,7 @@ export function More({
   onNavigate,
   onSignOut,
   onUpdateBusiness,
+  pwaState,
 }) {
   const debtors = dashboardSummary?.debtors || [];
   const [form, setForm] = useState(() => toBusinessForm(business));
@@ -226,6 +227,41 @@ export function More({
                 <ChevronRight className="h-4 w-4 text-slate-400" />
               </button>
             ))}
+          </div>
+
+          <div className="panel p-4 sm:p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="label">Progressive Web App</p>
+                <h3 className="mt-0.5 text-base font-black text-ink">App Installation & Offline</h3>
+              </div>
+              <Badge variant={pwaState?.isInstalled ? "green" : "blue"}>
+                {pwaState?.isInstalled ? "Installed" : "PWA Active"}
+              </Badge>
+            </div>
+            <p className="text-xs font-medium text-slate-600 leading-relaxed">
+              BizTrac is fully PWA-enabled. You can install it on Android, iOS, Windows, or Mac for standalone window execution, offline functionality, and quick launcher access.
+            </p>
+            {pwaState?.canInstall || pwaState?.isIOS ? (
+              <button
+                onClick={pwaState.onInstallPwa}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-palm px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-palm/20 transition hover:bg-palmDeep"
+              >
+                Install BizTrac App
+              </button>
+            ) : pwaState?.needRefresh ? (
+              <button
+                onClick={pwaState.onUpdatePwa}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-sky-600/20 transition hover:bg-sky-700"
+              >
+                Update App Now
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 border border-slate-200">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span>Service worker registered & offline cache active</span>
+              </div>
+            )}
           </div>
 
           <Button icon={LogOut} variant="danger" className="w-full" onClick={onSignOut}>

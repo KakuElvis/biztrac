@@ -10,9 +10,11 @@ import {
   ShoppingCart,
   UsersRound,
   WalletCards,
+  Smartphone,
 } from "lucide-react";
 import { AppLogo } from "../../components/common/AppLogo.jsx";
 import { classNames } from "../../lib/formatters.js";
+import { PwaBanner, PwaInstallButton } from "../pwa/PwaBanner.jsx";
 
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: Home },
@@ -34,7 +36,10 @@ export function AppShell({
   queuedCount = 0,
   isSyncing = false,
   onTriggerSync,
+  pwaState = {},
 }) {
+  const { canInstall, isInstalled, isIOS, needRefresh, onInstallPwa, onUpdatePwa } = pwaState;
+
   return (
     <div className="min-h-screen pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-0">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl lg:grid lg:grid-cols-[18rem_1fr]">
@@ -55,6 +60,23 @@ export function AppShell({
               onClick={() => onNavigate("expenses")}
             />
           </nav>
+          
+          {(canInstall || isIOS) && !isInstalled ? (
+            <div className="mt-4 rounded-xl border border-palm/30 bg-skyglass p-3 text-center">
+              <p className="text-xs font-black text-ink mb-2 flex items-center justify-center gap-1.5">
+                <Smartphone className="h-4 w-4 text-palm" />
+                <span>Get Desktop / Mobile App</span>
+              </p>
+              <PwaInstallButton
+                canInstall={canInstall}
+                isInstalled={isInstalled}
+                isIOS={isIOS}
+                onInstall={onInstallPwa}
+                className="w-full justify-center"
+              />
+            </div>
+          ) : null}
+
           <div className="mt-auto rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
             <p className="text-[0.7rem] font-bold uppercase tracking-normal text-slate-500">
               Product developed by
@@ -95,6 +117,15 @@ export function AppShell({
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {(canInstall || isIOS) && !isInstalled ? (
+                  <button
+                    onClick={onInstallPwa}
+                    className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-palm/30 bg-skyglass px-3 py-2 text-xs font-bold text-palm transition hover:bg-palm hover:text-white"
+                  >
+                    <Smartphone className="h-4 w-4" />
+                    <span>Install App</span>
+                  </button>
+                ) : null}
                 <button className="icon-button" aria-label="Search">
                   <Search className="h-5 w-5" />
                 </button>
@@ -109,34 +140,45 @@ export function AppShell({
             </div>
           </header>
 
-          {!isOnline ? (
-            <div className="screen-pad mx-auto max-w-5xl rounded-3xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 shadow-sm sm:mb-4">
-              You are offline. Core app pages are available, but new data may not sync until you reconnect.
-            </div>
-          ) : null}
+          <div className="screen-pad mx-auto max-w-5xl pt-4 space-y-3">
+            <PwaBanner
+              canInstall={canInstall}
+              isInstalled={isInstalled}
+              isIOS={isIOS}
+              needRefresh={needRefresh}
+              onInstall={onInstallPwa}
+              onUpdate={onUpdatePwa}
+            />
 
-          {queuedCount > 0 ? (
-            <div className="screen-pad mx-auto flex max-w-5xl items-center justify-between gap-3 rounded-3xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-900 shadow-sm sm:mb-4">
-              <div className="flex items-center gap-2">
-                <span className="grid h-6 min-w-6 place-items-center rounded-full bg-sky-600 px-1 text-xs font-black text-white">
-                  {queuedCount}
-                </span>
-                <span>
-                  {queuedCount === 1 ? "1 offline sale queued." : `${queuedCount} offline sales queued.`}
-                  {isOnline ? (isSyncing ? " Syncing automatically..." : " Ready to sync.") : " Reconnect to sync."}
-                </span>
+            {!isOnline ? (
+              <div className="rounded-3xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 shadow-sm">
+                You are offline. Core app pages are available, but new data may not sync until you reconnect.
               </div>
-              {isOnline && onTriggerSync ? (
-                <button
-                  onClick={onTriggerSync}
-                  disabled={isSyncing}
-                  className="rounded-xl bg-sky-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-sky-700 disabled:opacity-50"
-                >
-                  {isSyncing ? "Syncing..." : "Sync Now"}
-                </button>
-              ) : null}
-            </div>
-          ) : null}
+            ) : null}
+
+            {queuedCount > 0 ? (
+              <div className="flex items-center justify-between gap-3 rounded-3xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-900 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <span className="grid h-6 min-w-6 place-items-center rounded-full bg-sky-600 px-1 text-xs font-black text-white">
+                    {queuedCount}
+                  </span>
+                  <span>
+                    {queuedCount === 1 ? "1 offline sale queued." : `${queuedCount} offline sales queued.`}
+                    {isOnline ? (isSyncing ? " Syncing automatically..." : " Ready to sync.") : " Reconnect to sync."}
+                  </span>
+                </div>
+                {isOnline && onTriggerSync ? (
+                  <button
+                    onClick={onTriggerSync}
+                    disabled={isSyncing}
+                    className="rounded-xl bg-sky-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-sky-700 disabled:opacity-50"
+                  >
+                    {isSyncing ? "Syncing..." : "Sync Now"}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
 
           <div className="screen-pad mx-auto max-w-5xl py-5 sm:py-7">{children}</div>
         </main>

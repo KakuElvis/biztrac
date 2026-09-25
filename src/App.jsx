@@ -9,6 +9,7 @@ import { useCustomers } from "./hooks/useCustomers.js";
 import { useExpenses } from "./hooks/useExpenses.js";
 import { useAnalytics } from "./hooks/useAnalytics.js";
 import { useOfflineSync } from "./hooks/useOfflineSync.js";
+import { usePWA } from "./hooks/usePWA.js";
 
 const Dashboard = lazy(() => import("./features/dashboard/Dashboard.jsx").then((m) => ({ default: m.Dashboard || m.default })));
 const Inventory = lazy(() => import("./features/inventory/Inventory.jsx").then((m) => ({ default: m.Inventory || m.default })));
@@ -29,6 +30,16 @@ const screens = {
 };
 
 export default function App() {
+  const { canInstall, isInstalled, isIOS, needRefresh, offlineReady, installApp, updateApp } = usePWA();
+  const pwaState = {
+    canInstall,
+    isInstalled,
+    isIOS,
+    needRefresh,
+    offlineReady,
+    onInstallPwa: installApp,
+    onUpdatePwa: updateApp,
+  };
   const {
     session,
     workspace,
@@ -253,6 +264,7 @@ export default function App() {
       queuedCount={queuedCount}
       isSyncing={isSyncing}
       onTriggerSync={triggerSync}
+      pwaState={pwaState}
     >
       <Suspense fallback={<div className="p-6">Loading…</div>}>
         <Screen
@@ -311,6 +323,7 @@ export default function App() {
           totalPages={totalPages}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
+          pwaState={pwaState}
         />
       </Suspense>
     </AppShell>
