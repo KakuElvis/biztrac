@@ -120,19 +120,94 @@ export async function deleteProduct(businessId, productId) {
 
 export async function restockProduct(businessId, productId, restockData) {
   const { quantityAdded, newCostPrice, newSellingPrice, supplierName = "", notes = "" } = restockData;
+  const client = requireSupabase();
 
-  const { data, error } = await requireSupabase().rpc("restock_product", {
-    p_business_id: businessId,
-    p_product_id: productId,
-    p_quantity_added: Number(quantityAdded),
-    p_new_cost_price: Number(newCostPrice),
-    p_new_selling_price: Number(newSellingPrice),
-    p_supplier_name: (supplierName || "").trim(),
-    p_notes: (notes || "").trim(),
-  });
+  try {
+    const { data, error } = await client.rpc("restock_product", {
+      p_business_id: businessId,
+      p_product_id: productId,
+      p_quantity_added: Number(quantityAdded),
+      p_new_cost_price: Number(newCostPrice),
+      p_new_selling_price: Number(newSellingPrice),
+      p_supplier_name: (supplierName || "").trim(),
+      p_notes: (notes || "").trim(),
+    });
 
-  if (error) throw error;
-  return data;
+    if (!error) return data;
+
+    const isRpcMissing =
+      error.code === "PGRST202" ||
+      error.message?.includes("Could not find the function") ||
+      error.message?.includes("schema cache");
+
+    if (!isRpcMissing) throw error;
+  } catch (rpcErr) {
+    const isRpcMissing =
+      rpcErr.code === "PGRST202" ||
+      rpcErr.message?.includes("Could not find the function") ||
+      rpcErr.message?.includes("schema cache");
+
+    if (!isRpcMissing) throw rpcErr;
+  }
+
+  // Direct table update fallback if RPC migration has not been applied to Supabase DB yet
+  const { data: currentProduct, error: fetchErr } = await client
+    .from("products")
+    .select("quantity, cost_price, selling_price")
+    .eq("id", productId)
+    .eq("business_id", businessId)
+    .single();
+
+  if (fetchErr) throw fetchErr;
+
+  const prevQty = Number(currentProduct.quantity || 0);
+  const qtyToAdd = Number(quantityAdded || 0);
+  const newQty = prevQty + qtyToAdd;
+  const cost = newCostPrice !== undefined && newCostPrice !== null && !isNaN(newCostPrice)
+    ? Number(newCostPrice)
+    : Number(currentProduct.cost_price || 0);
+  const selling = newSellingPrice !== undefined && newSellingPrice !== null && !isNaN(newSellingPrice)
+    ? Number(newSellingPrice)
+    : Number(currentProduct.selling_price || 0);
+
+  const { error: updateErr } = await client
+    .from("products")
+    .update({
+      quantity: newQty,
+      cost_price: cost,
+      selling_price: selling,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", productId)
+    .eq("business_id", businessId);
+
+  if (updateErr) throw updateErr;
+
+  try {
+    await client.from("product_restocks").insert({
+      business_id: businessId,
+      product_id: productId,
+      quantity_added: qtyToAdd,
+      previous_quantity: prevQty,
+      new_quantity: newQty,
+      old_cost_price: Number(currentProduct.cost_price || 0),
+      new_cost_price: cost,
+      old_selling_price: Number(currentProduct.selling_price || 0),
+      new_selling_price: selling,
+      supplier_name: (supplierName || "").trim(),
+      notes: (notes || "").trim(),
+    });
+  } catch (logErr) {
+    // Ignore error if product_restocks table is missing
+  }
+
+  return {
+    product_id: productId,
+    previous_quantity: prevQty,
+    new_quantity: newQty,
+    cost_price: cost,
+    selling_price: selling,
+  };
 }
 
 export async function listProductRestocks(businessId, productId) {
