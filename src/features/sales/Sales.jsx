@@ -26,10 +26,11 @@ import {
 const paymentTypes = ["Cash", "MoMo", "Bank", "Credit"];
 
 function toReceiptLine(line) {
+  const qty = Number(line.quantity) || 0;
   return {
     productId: line.productId,
     name: line.product.name,
-    quantity: line.quantity,
+    quantity: qty,
     unitPrice: line.product.sellingPrice,
     total: line.total,
   };
@@ -406,12 +407,13 @@ export function Sales({
   const cartLines = cart
     .map((line) => {
       const product = products.find((item) => item.id === line.productId);
-      return product ? { ...line, product, total: line.quantity * product.sellingPrice } : null;
+      const qtyNum = line.quantity === "" ? 0 : Number(line.quantity) || 0;
+      return product ? { ...line, quantity: line.quantity, quantityNum: qtyNum, product, total: qtyNum * product.sellingPrice } : null;
     })
     .filter(Boolean);
   const total = cartLines.reduce((sum, line) => sum + line.total, 0);
   const profit = cartLines.reduce(
-    (sum, line) => sum + (line.product.sellingPrice - line.product.costPrice) * line.quantity,
+    (sum, line) => sum + (line.product.sellingPrice - line.product.costPrice) * (line.quantityNum || 0),
     0
   );
   const previewReceipt = cartLines.length
@@ -521,10 +523,62 @@ export function Sales({
 
           const product = products.find((item) => item.id === productId);
           const maxQuantity = product?.quantity || 0;
-          return { ...line, quantity: Math.min(maxQuantity, Math.max(0, line.quantity + change)) };
+          const currentQty = Number(line.quantity) || 0;
+          const nextQty = Math.min(maxQuantity, Math.max(0, currentQty + change));
+          return { ...line, quantity: nextQty };
         })
-        .filter((line) => line.quantity > 0)
+        .filter((line) => Number(line.quantity) > 0)
     );
+  };
+
+  const updateQuantity = (productId, rawValue) => {
+    setActionError("");
+    setSuccessMessage("");
+
+    if (rawValue === "" || rawValue === null) {
+      setCart((current) =>
+        current.map((line) => (line.productId === productId ? { ...line, quantity: "" } : line))
+      );
+      return;
+    }
+
+    const parsed = parseInt(rawValue, 10);
+    if (isNaN(parsed)) return;
+
+    setCart((current) =>
+      current.map((line) => {
+        if (line.productId !== productId) return line;
+        const product = products.find((item) => item.id === productId);
+        const maxQuantity = product?.quantity || 0;
+
+        if (parsed > maxQuantity) {
+          setActionError(`Only ${maxQuantity} in stock for ${product?.name || "this product"}.`);
+        }
+
+        const validQty = Math.max(0, Math.min(maxQuantity, parsed));
+        return { ...line, quantity: validQty };
+      })
+    );
+  };
+
+  const handleQuantityBlur = (productId) => {
+    setCart((current) =>
+      current
+        .map((line) => {
+          if (line.productId !== productId) return line;
+          if (line.quantity === "" || line.quantity === null || Number(line.quantity) <= 0) {
+            return { ...line, quantity: 1 };
+          }
+          return line;
+        })
+        .filter((line) => Number(line.quantity) > 0)
+    );
+  };
+
+  const removeFromCart = (productId) => {
+    setActionError("");
+    setSuccessMessage("");
+    setCart((current) => current.filter((line) => line.productId !== productId));
   };
 
   const completeSale = async () => {
@@ -551,7 +605,13 @@ export function Sales({
       return;
     }
 
-    const overStockLine = cartLines.find((line) => line.quantity > line.product.quantity);
+    const invalidQtyLine = cartLines.find((line) => !line.quantityNum || line.quantityNum <= 0);
+    if (invalidQtyLine) {
+      setActionError(`Enter a valid quantity for ${invalidQtyLine.product.name}.`);
+      return;
+    }
+
+    const overStockLine = cartLines.find((line) => line.quantityNum > line.product.quantity);
     if (overStockLine) {
       setActionError(`${overStockLine.product.name} only has ${overStockLine.product.quantity} in stock.`);
       return;
@@ -803,26 +863,49 @@ export function Sales({
             <div className="mt-4 divide-y divide-slate-100">
               {cartLines.map((line) => (
                 <div key={line.productId} className="flex items-center justify-between gap-3 py-3">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-black text-ink">{line.product.name}</p>
                     <p className="text-xs font-semibold text-slate-500">
                       {formatCurrency(line.product.sellingPrice)} each
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button className="icon-button h-9 w-9" onClick={() => changeQuantity(line.productId, -1)} aria-label="Reduce quantity">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <button
+                      type="button"
+                      className="icon-button h-9 w-9 shrink-0"
+                      onClick={() => changeQuantity(line.productId, -1)}
+                      aria-label="Reduce quantity"
+                    >
                       <Minus className="h-4 w-4" />
                     </button>
-                    <span className="grid h-9 min-w-10 place-items-center rounded-xl bg-slate-100 px-2 text-sm font-black text-ink">
-                      {line.quantity}
-                    </span>
+                    <input
+                      type="number"
+                      min="1"
+                      max={line.product.quantity}
+                      className="h-9 w-16 rounded-xl border border-slate-200 bg-slate-50 px-1 text-center text-sm font-black text-ink transition focus:border-palm focus:bg-white focus:outline-none focus:ring-2 focus:ring-palm/20"
+                      value={line.quantity}
+                      onChange={(e) => updateQuantity(line.productId, e.target.value)}
+                      onBlur={() => handleQuantityBlur(line.productId)}
+                      onFocus={(e) => e.target.select()}
+                      aria-label="Item quantity"
+                    />
                     <button
-                      className="icon-button h-9 w-9 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={line.quantity >= line.product.quantity}
+                      type="button"
+                      className="icon-button h-9 w-9 shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={Number(line.quantity) >= line.product.quantity}
                       onClick={() => changeQuantity(line.productId, 1)}
                       aria-label="Increase quantity"
                     >
                       <Plus className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-button h-9 w-9 shrink-0 text-slate-400 hover:bg-red-50 hover:text-red-600 transition ml-1"
+                      onClick={() => removeFromCart(line.productId)}
+                      title="Remove item"
+                      aria-label="Remove item"
+                    >
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
