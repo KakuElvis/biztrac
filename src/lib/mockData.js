@@ -125,9 +125,9 @@ export const expenses = [
 ];
 
 export const debtors = [
-  { id: 1, name: "Akosua Trendz", amount: 1240, due: "Due in 3 days" },
-  { id: 2, name: "Kwame Boakye", amount: 450, due: "Due today" },
-  { id: 3, name: "Mabel Osei", amount: 220, due: "Overdue" },
+  { id: 1, name: "Akosua Trendz", amount: 1240, due: "Due Date: Oct 15, 2026" },
+  { id: 2, name: "Kwame Boakye", amount: 450, due: "Due Date: Oct 05, 2026" },
+  { id: 3, name: "Mabel Osei", amount: 220, due: "Due Date: Oct 01, 2026 (Overdue)" },
 ];
 
 export const reportSeries = [

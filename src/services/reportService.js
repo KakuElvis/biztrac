@@ -88,12 +88,21 @@ function formatSaleDate(value) {
   }).format(new Date(value));
 }
 
+function resolveDueDate(dueDateStr, soldAtStr) {
+  if (dueDateStr) return new Date(dueDateStr);
+  if (!soldAtStr) return null;
+  const date = new Date(soldAtStr);
+  date.setDate(date.getDate() + 7);
+  return date;
+}
+
 function toDebtor(row, customerNames) {
+  const dueDateObj = resolveDueDate(row.due_date, row.sold_at);
   return {
     id: row.id,
     name: customerNames.get(row.customer_id) || shortReference(row),
     amount: Math.max(toNumber(row.total) - toNumber(row.amount_paid), 0),
-    due: formatSaleDate(row.sold_at),
+    due: dueDateObj ? `Due Date: ${formatSaleDate(dueDateObj)}` : "No due date",
   };
 }
 
@@ -217,16 +226,46 @@ export async function getReportSummary(businessId, { range = "weekly", startDate
 
   let debtors = [];
   if (!debtorBalancesResult.error && debtorBalancesResult.data) {
-    debtors = debtorBalancesResult.data.slice(0, 5).map((item) => ({
-      id: item.customer_id,
-      name: item.customer_name || "Customer",
-      amount: toNumber(item.total_debt),
-      due: formatSaleDate(item.latest_sale_at),
-    }));
+    const customerIds = debtorBalancesResult.data.map((d) => d.customer_id).filter(Boolean);
+    const customerDueDateMap = new Map();
+    if (customerIds.length > 0) {
+      const { data: creditSales } = await client
+        .from("sales")
+        .select("customer_id, due_date, sold_at")
+        .eq("business_id", businessId)
+        .in("customer_id", customerIds)
+        .order("sold_at", { ascending: false });
+
+      if (creditSales) {
+        creditSales.forEach((s) => {
+          if (!customerDueDateMap.has(s.customer_id)) {
+            const dueDateObj = resolveDueDate(s.due_date, s.sold_at);
+            if (dueDateObj) customerDueDateMap.set(s.customer_id, dueDateObj);
+          }
+        });
+      }
+    }
+
+    debtors = debtorBalancesResult.data.slice(0, 5).map((item) => {
+      let dueDateObj = customerDueDateMap.get(item.customer_id);
+      if (!dueDateObj && item.latest_sale_at) {
+        dueDateObj = resolveDueDate(null, item.latest_sale_at);
+      }
+      const displayDue = dueDateObj
+        ? `Due Date: ${formatSaleDate(dueDateObj)}`
+        : "No due date";
+
+      return {
+        id: item.customer_id,
+        name: item.customer_name || "Customer",
+        amount: toNumber(item.total_debt),
+        due: displayDue,
+      };
+    });
   } else {
     const fallbackDebtorSales = await client
       .from("sales")
-      .select("id, reference, customer_id, total, amount_paid, sold_at")
+      .select("id, reference, customer_id, total, amount_paid, sold_at, due_date")
       .eq("business_id", businessId)
       .order("sold_at", { ascending: false })
       .limit(50);
