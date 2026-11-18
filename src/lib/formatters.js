@@ -12,11 +12,13 @@ export const compactCurrency = new Intl.NumberFormat("en-GH", {
 });
 
 export function formatCurrency(value) {
-  return currency.format(value);
+  const num = Number(value);
+  return currency.format(Number.isFinite(num) ? num : 0);
 }
 
 export function formatCompactCurrency(value) {
-  return compactCurrency.format(value);
+  const num = Number(value);
+  return compactCurrency.format(Number.isFinite(num) ? num : 0);
 }
 
 export function classNames(...values) {

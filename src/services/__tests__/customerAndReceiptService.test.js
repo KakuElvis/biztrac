@@ -5,6 +5,8 @@ import {
   toBusiness,
 } from "../businessService.js";
 import { forgiveCustomerDebt } from "../customerService.js";
+import { buildReceiptHtml, sampleTestReceipt } from "../../lib/receiptHtml.js";
+import { formatCurrency } from "../../lib/formatters.js";
 
 // Mock localStorage for node test environment
 const mockStorage = new Map();
@@ -66,6 +68,79 @@ describe("Receipt Settings & Thermal Formatting", () => {
     expect(business.receipt_width).toBe("58mm");
     expect(business.return_policy).toBe("Goods sold in good condition are not returnable after 3 days.");
     expect(business.receipt_footer).toBe("Thank you for your patronage! Visit again.");
+    expect(business.auto_print_receipt).toBe(false);
+  });
+
+  it("persists auto_print_receipt setting and renders test receipt html correctly", () => {
+    const bId = "biz-auto-789";
+    const settings = {
+      auto_print_receipt: true,
+      receipt_width: "80mm",
+      momo_details: "0244112233",
+    };
+    saveLocalReceiptSettings(bId, settings);
+    expect(getLocalReceiptSettings(bId).auto_print_receipt).toBe(true);
+
+    const business = toBusiness({ id: bId, name: "Kaneshie Ventures" });
+    expect(business.auto_print_receipt).toBe(true);
+    expect(business.receipt_width).toBe("80mm");
+
+    const html = buildReceiptHtml(sampleTestReceipt, business);
+    expect(html).toContain("Kaneshie Ventures");
+    expect(html).toContain("TEST-RECEIPT-001");
+    expect(html).toContain("MoMo: 0244112233");
+    expect(html).toContain("72mm"); // 80mm printable width
+  });
+
+  it("formats MoMo and Bank payment account and amount paid into receipt HTML", () => {
+    const momoReceipt = {
+      reference: "REC-MOMO-001",
+      customerName: "Kofi Mensah",
+      paymentType: "MoMo",
+      paymentAccount: "0244123456 (MTN)",
+      lines: [{ name: "Rice 5kg", quantity: 1, unitPrice: 150, total: 150 }],
+      total: 150,
+      amountPaid: 150,
+    };
+    const business = { name: "Accra Mart", receipt_width: "58mm" };
+    const html = buildReceiptHtml(momoReceipt, business);
+
+    expect(html).toContain("Account / Ref:");
+    expect(html).toContain("0244123456 (MTN)");
+    expect(html).toContain("Amount Paid (MoMo):");
+    expect(html).toContain(formatCurrency(150));
+
+    const bankReceipt = {
+      reference: "REC-BANK-002",
+      customerName: "Ama Serwaa",
+      paymentType: "Bank",
+      paymentAccount: "GCB Transfer Ref #99281",
+      lines: [{ name: "Cooking Oil 25L", quantity: 1, unitPrice: 500, total: 500 }],
+      total: 500,
+      amountPaid: 350,
+    };
+    const bankHtml = buildReceiptHtml(bankReceipt, business);
+    expect(bankHtml).toContain("<span>Payment:</span><strong>Bank</strong>");
+    expect(bankHtml).toContain("Account / Ref:");
+    expect(bankHtml).toContain("GCB Transfer Ref #99281");
+    expect(bankHtml).toContain("Amount Paid (Bank):");
+    expect(bankHtml).toContain(formatCurrency(350));
+    expect(bankHtml).toContain("BALANCE DUE:");
+    expect(bankHtml).toContain(formatCurrency(150));
+  });
+
+  it("handles receipt with missing total safely without producing NaN", () => {
+    const emptyReceipt = {
+      reference: "REC-EMPTY",
+      customerName: "Walk-in",
+      paymentType: "Cash",
+      lines: [],
+    };
+    const business = { name: "Accra Mart" };
+    const html = buildReceiptHtml(emptyReceipt, business);
+
+    expect(html).not.toContain("NaN");
+    expect(html).toContain("TOTAL:");
   });
 });
 

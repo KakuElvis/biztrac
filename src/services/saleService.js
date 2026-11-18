@@ -60,7 +60,7 @@ function validateLines(lines) {
   });
 }
 
-export async function createSale(businessId, { customer, lines, paymentType, amountPaid, dueDate }) {
+export async function createSale(businessId, { customer, lines, paymentType, amountPaid, dueDate, notes }) {
   validateLines(lines);
 
   const paymentMethod = toPaymentMethod(paymentType);
@@ -81,7 +81,7 @@ export async function createSale(businessId, { customer, lines, paymentType, amo
       product_id: line.product.id,
       quantity: line.quantity,
     })),
-    p_notes: null,
+    p_notes: notes ? String(notes).trim() : null,
     p_payment_method: paymentMethod,
     p_amount_paid: amountPaid !== undefined && amountPaid !== null ? Number(amountPaid) : null,
     p_due_date: dueDate || null,

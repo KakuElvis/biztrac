@@ -243,13 +243,14 @@ export default function App() {
     return updated;
   };
 
-  const handleCompleteSale = async ({ customer, lines, paymentType, amountPaid, dueDate }) => {
+  const handleCompleteSale = async ({ customer, lines, paymentType, amountPaid, dueDate, notes }) => {
     const result = await repository.completeSale(businessId, {
       customer,
       lines,
       paymentType,
       amountPaid,
       dueDate,
+      notes,
     });
 
     setProducts((current) =>

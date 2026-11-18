@@ -128,8 +128,8 @@ export const supabaseRepository = {
     return getProductStockTimeline(businessId, productId);
   },
 
-  async completeSale(businessId, { customer, lines, paymentType, amountPaid, dueDate }) {
-    return createSale(businessId, { customer, lines, paymentType, amountPaid, dueDate });
+  async completeSale(businessId, { customer, lines, paymentType, amountPaid, dueDate, notes }) {
+    return createSale(businessId, { customer, lines, paymentType, amountPaid, dueDate, notes });
   },
 
   async updateBusiness(businessId, nextBusiness) {

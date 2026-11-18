@@ -50,6 +50,9 @@ export function toBusiness(row) {
       row.receipt_footer ??
       local.receipt_footer ??
       "Thank you for your patronage! Visit again.",
+    auto_print_receipt: Boolean(
+      row.auto_print_receipt ?? local.auto_print_receipt ?? false
+    ),
   };
 }
 
@@ -62,6 +65,8 @@ export async function updateBusiness(businessId, business) {
     return_policy: business.return_policy !== undefined ? business.return_policy.trim() : undefined,
     receipt_width: business.receipt_width || undefined,
     receipt_footer: business.receipt_footer !== undefined ? business.receipt_footer.trim() : undefined,
+    auto_print_receipt:
+      business.auto_print_receipt !== undefined ? Boolean(business.auto_print_receipt) : undefined,
   };
 
   // Clean undefined properties

@@ -25,6 +25,7 @@ import {
 import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
 import { formatCurrency } from "../../lib/formatters.js";
+import { formatReceiptDate, printThermalReceipt } from "../../lib/receiptHtml.js";
 import { showToast } from "../../lib/toast.js";
 import {
   enqueueOfflineSale,
@@ -45,14 +46,8 @@ function toReceiptLine(line) {
   };
 }
 
-function formatReceiptDate(value) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
 function buildReceiptText(receipt, business) {
+  if (!receipt) return "";
   const businessName = business?.name || "BizTrac";
   const businessDetails = [business?.phone, business?.location].filter(Boolean).join(" | ");
   const lines = (receipt.lines || [])
@@ -64,11 +59,15 @@ function buildReceiptText(receipt, business) {
     )
     .join("\n");
 
+  const isMomoOrBank = receipt.paymentType === "MoMo" || receipt.paymentType === "Bank";
+  const momoOrBankPaid = receipt.amountPaid ?? receipt.total;
+  const momoOrBankBalance = Math.max(0, (receipt.total || 0) - (receipt.amountPaid ?? receipt.total));
+
   const isCreditOrPartial =
     receipt.paymentType === "Credit" ||
-    (receipt.amountPaid !== undefined && receipt.amountPaid < receipt.total);
+    (!isMomoOrBank && receipt.amountPaid !== undefined && receipt.amountPaid < receipt.total);
   const amountPaid = receipt.amountPaid || 0;
-  const balanceDue = Math.max(0, receipt.total - amountPaid);
+  const balanceDue = Math.max(0, (receipt.total || 0) - amountPaid);
   const hasCashChange =
     receipt.paymentType === "Cash" &&
     receipt.amountTendered !== undefined &&
@@ -80,17 +79,20 @@ function buildReceiptText(receipt, business) {
     businessDetails,
     business?.momo_details ? `MoMo: ${business.momo_details}` : "",
     "",
-    `Receipt: ${receipt.reference}`,
-    `Date: ${formatReceiptDate(receipt.createdAt)}`,
+    `Receipt: ${receipt.reference || "Draft"}`,
+    `Date: ${formatReceiptDate(receipt.createdAt || new Date().toISOString())}`,
     `Customer: ${receipt.customerName || "Walk-in"}`,
-    `Payment: ${receipt.paymentType}`,
+    `Payment: ${receipt.paymentType || "Cash"}`,
+    receipt.paymentAccount ? `Account / Ref: ${receipt.paymentAccount}` : "",
     receipt.dueDate ? `Credit Due Date: ${formatReceiptDate(receipt.dueDate)}` : "",
     "",
     lines,
     "",
-    `Total: ${formatCurrency(receipt.total)}`,
+    `Total: ${formatCurrency(receipt.total || 0)}`,
     hasCashChange ? `Cash Tendered: ${formatCurrency(receipt.amountTendered)}` : "",
     hasCashChange && receipt.changeDue !== undefined ? `Change: ${formatCurrency(receipt.changeDue)}` : "",
+    isMomoOrBank && receipt.amountPaid !== undefined ? `Amount Paid (${receipt.paymentType}): ${formatCurrency(momoOrBankPaid)}` : "",
+    isMomoOrBank && receipt.amountPaid !== undefined && receipt.amountPaid < receipt.total ? `Balance Due: ${formatCurrency(momoOrBankBalance)}` : "",
     isCreditOrPartial ? `Amount Paid: ${formatCurrency(amountPaid)}` : "",
     isCreditOrPartial ? `Balance Due: ${formatCurrency(balanceDue)}` : "",
     business?.return_policy ? `Return Policy: ${business.return_policy}` : "",
@@ -138,6 +140,7 @@ function buildWhatsAppReceiptText(receipt, business) {
     `📅 *Date:* ${formatReceiptDate(receipt.createdAt || new Date().toISOString())}`,
     `👤 *Customer:* ${receipt.customerName || "Walk-in"}`,
     `💳 *Payment:* ${receipt.paymentType || "Cash"}`,
+    receipt.paymentAccount ? `${receipt.paymentType === "Bank" ? "🏦" : "📱"} *Account / Ref:* ${receipt.paymentAccount}` : "",
     receipt.dueDate ? `📆 *Due Date:* ${formatReceiptDate(receipt.dueDate)}` : "",
     `--------------------------------`,
     `*ITEMS:*`,
@@ -153,7 +156,12 @@ function buildWhatsAppReceiptText(receipt, business) {
     }
   }
 
-  if (isCreditOrPartial) {
+  if (receipt.paymentType === "MoMo" || receipt.paymentType === "Bank") {
+    lines.push(`💵 *Amount Paid (${receipt.paymentType}):* ${formatCurrency(receipt.amountPaid ?? receipt.total)}`);
+    if (receipt.amountPaid !== undefined && receipt.amountPaid < receipt.total) {
+      lines.push(`⚠️ *Balance Due:* ${formatCurrency(receipt.total - receipt.amountPaid)}`);
+    }
+  } else if (isCreditOrPartial) {
     lines.push(`💵 *Amount Paid:* ${formatCurrency(amountPaid)}`);
     lines.push(`⚠️ *Balance Due:* ${formatCurrency(balanceDue)}`);
   }
@@ -269,167 +277,6 @@ function downloadFile(file) {
   URL.revokeObjectURL(url);
 }
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function buildReceiptHtml(receipt, business) {
-  const businessName = escapeHtml(business?.name || "BizTrac");
-  const businessDetails = escapeHtml([business?.phone, business?.location].filter(Boolean).join(" • "));
-  const is80mm = business?.receipt_width === "80mm";
-  const paperWidthCss = is80mm ? "72mm" : "48mm";
-  const fontSizeCss = is80mm ? "12px" : "11px";
-
-  const rows = (receipt.lines || [])
-    .map(
-      (line) => `
-        <tr>
-          <td style="padding: 3px 0;">
-            <div style="font-weight: bold;">${escapeHtml(line.name)}</div>
-            <div style="font-size: 10px; color: #333;">${line.quantity} x ${escapeHtml(formatCurrency(line.unitPrice))}</div>
-          </td>
-          <td style="padding: 3px 0; text-align: right; font-weight: bold; vertical-align: top;">
-            ${escapeHtml(formatCurrency(line.total))}
-          </td>
-        </tr>
-      `
-    )
-    .join("");
-
-  const isCreditOrPartial =
-    receipt.paymentType === "Credit" ||
-    (receipt.amountPaid !== undefined && receipt.amountPaid < receipt.total);
-  const amountPaid = receipt.amountPaid || 0;
-  const balanceDue = Math.max(0, receipt.total - amountPaid);
-  const hasCashChange =
-    receipt.paymentType === "Cash" &&
-    receipt.amountTendered !== undefined &&
-    receipt.amountTendered >= receipt.total;
-
-  return `
-    <!doctype html>
-    <html>
-      <head>
-        <title>${businessName} Receipt ${escapeHtml(receipt.reference || "")}</title>
-        <style>
-          * { box-sizing: border-box; }
-          @page {
-            margin: 0;
-            size: auto;
-          }
-          html, body {
-            margin: 0;
-            padding: 0;
-            background: #fff;
-            color: #000;
-            font-family: monospace, 'Courier New', Courier, sans-serif;
-            font-size: ${fontSizeCss};
-            line-height: 1.3;
-          }
-          .receipt {
-            width: ${paperWidthCss};
-            max-width: ${paperWidthCss};
-            margin: 0 auto;
-            padding: 2mm;
-          }
-          .text-center { text-align: center; }
-          h1 { margin: 0; font-size: ${is80mm ? "16px" : "14px"}; text-transform: uppercase; font-weight: bold; }
-          .slogan { font-size: 10px; font-style: italic; margin: 2px 0; }
-          .details { font-size: 10px; margin: 2px 0 6px; }
-          .momo { border: 1px dashed #000; padding: 3px; margin: 4px 0; font-weight: bold; font-size: 10px; }
-          .meta {
-            border-top: 1px dashed #000;
-            border-bottom: 1px dashed #000;
-            margin: 6px 0;
-            padding: 4px 0;
-          }
-          .meta div {
-            display: flex;
-            justify-content: space-between;
-            gap: 8px;
-            margin-top: 2px;
-          }
-          table {
-            border-collapse: collapse;
-            width: 100%;
-            margin: 4px 0;
-          }
-          .total {
-            border-top: 1px dashed #000;
-            border-bottom: 1px dashed #000;
-            font-size: ${is80mm ? "14px" : "12px"};
-            font-weight: 800;
-            margin-top: 6px;
-            padding: 6px 0;
-            display: flex;
-            justify-content: space-between;
-          }
-          .sub-row {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 3px;
-            font-size: 10px;
-          }
-          .footer {
-            border-top: 1px dashed #000;
-            margin-top: 8px;
-            padding-top: 6px;
-            text-align: center;
-            font-size: 9px;
-          }
-        </style>
-      </head>
-      <body>
-        <main class="receipt">
-          <div class="text-center">
-            <h1>${businessName}</h1>
-            ${business?.slogan ? `<p class="slogan">${escapeHtml(business.slogan)}</p>` : ""}
-            <p class="details">${businessDetails || "Sales Receipt"}</p>
-            ${business?.momo_details ? `<div class="momo">MoMo: ${escapeHtml(business.momo_details)}</div>` : ""}
-          </div>
-          <section class="meta">
-            <div><span>Receipt:</span><strong>${escapeHtml(receipt.reference || "Draft")}</strong></div>
-            <div><span>Date:</span><strong>${escapeHtml(formatReceiptDate(receipt.createdAt || new Date().toISOString()))}</strong></div>
-            <div><span>Customer:</span><strong>${escapeHtml(receipt.customerName || "Walk-in")}</strong></div>
-            <div><span>Payment:</span><strong>${escapeHtml(receipt.paymentType || "Cash")}</strong></div>
-            ${receipt.dueDate ? `<div><span>Due Date:</span><strong>${escapeHtml(formatReceiptDate(receipt.dueDate))}</strong></div>` : ""}
-          </section>
-          <table><tbody>${rows}</tbody></table>
-          <div class="total"><span>TOTAL:</span><span>${escapeHtml(formatCurrency(receipt.total))}</span></div>
-          ${hasCashChange ? `
-            <div class="sub-row">
-              <span>Cash Tendered:</span><span>${escapeHtml(formatCurrency(receipt.amountTendered))}</span>
-            </div>
-            ${receipt.changeDue !== undefined ? `
-              <div class="sub-row" style="font-weight: bold;">
-                <span>Change Given:</span><span>${escapeHtml(formatCurrency(receipt.changeDue))}</span>
-              </div>
-            ` : ""}
-          ` : ""}
-          ${isCreditOrPartial ? `
-            <div class="sub-row">
-              <span>Amount Paid:</span><span>${escapeHtml(formatCurrency(amountPaid))}</span>
-            </div>
-            <div class="sub-row" style="font-weight: bold;">
-              <span>BALANCE DUE:</span><span>${escapeHtml(formatCurrency(balanceDue))}</span>
-            </div>
-          ` : ""}
-          <div class="footer">
-            ${business?.return_policy ? `<p style="margin: 2px 0;">${escapeHtml(business.return_policy)}</p>` : ""}
-            <p style="margin: 4px 0; font-weight: bold;">${escapeHtml(business?.receipt_footer || "Thank you for buying from us! Visit again.")}</p>
-            <p style="margin: 2px 0; font-size: 8px; color: #555;">Powered by BizTrac</p>
-          </div>
-        </main>
-      </body>
-    </html>
-  `;
-}
-
 export function Sales({
   business,
   categories = [],
@@ -464,6 +311,10 @@ export function Sales({
   const [productSearch, setProductSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [cashTendered, setCashTendered] = useState("");
+  const [momoAccount, setMomoAccount] = useState("");
+  const [momoAmount, setMomoAmount] = useState("");
+  const [bankAccount, setBankAccount] = useState("");
+  const [bankAmount, setBankAmount] = useState("");
   const searchInputRef = useRef(null);
   const checkoutSectionRef = useRef(null);
 
@@ -527,6 +378,22 @@ export function Sales({
   const hasCashChange = paymentType === "Cash" && cashTendered !== "" && tenderedNum >= total;
   const changeDue = cashTendered !== "" ? tenderedNum - total : 0;
 
+  const previewAmountPaid =
+    paymentType === "Credit"
+      ? downPayment ? Number(downPayment) : 0
+      : paymentType === "MoMo"
+      ? momoAmount !== "" ? Number(momoAmount) : total
+      : paymentType === "Bank"
+      ? bankAmount !== "" ? Number(bankAmount) : total
+      : total;
+
+  const previewPaymentAccount =
+    paymentType === "MoMo"
+      ? momoAccount.trim()
+      : paymentType === "Bank"
+      ? bankAccount.trim()
+      : undefined;
+
   const previewReceipt = cartLines.length
     ? {
         reference: "Draft receipt",
@@ -535,12 +402,21 @@ export function Sales({
         paymentType,
         total,
         profit,
-        amountPaid: paymentType === "Credit" && downPayment ? Number(downPayment) : 0,
+        amountPaid: previewAmountPaid,
+        paymentAccount: previewPaymentAccount || undefined,
         dueDate: paymentType === "Credit" ? dueDate : null,
         amountTendered: hasCashChange ? tenderedNum : undefined,
         changeDue: hasCashChange ? changeDue : undefined,
       }
     : lastReceipt;
+
+  const activeCustomerPhone = useMemo(() => {
+    if (customerMode === "existing") {
+      return customers.find((c) => c.id === selectedCustomerId)?.phone || "";
+    }
+    if (customerMode === "new") return newCustomerPhone.trim();
+    return "";
+  }, [customerMode, customers, selectedCustomerId, newCustomerPhone]);
 
   function getCustomerName() {
     if (customerMode === "existing") {
@@ -730,15 +606,33 @@ export function Sales({
       return;
     }
 
-    const parsedDownPayment = paymentType === "Credit" && downPayment ? Number(downPayment) : 0;
+    let parsedAmountPaid;
+    let paymentNotes = "";
+    let paymentAccount = "";
+
+    if (paymentType === "Credit") {
+      parsedAmountPaid = downPayment ? Number(downPayment) : 0;
+    } else if (paymentType === "MoMo") {
+      parsedAmountPaid = momoAmount !== "" ? Number(momoAmount) : total;
+      paymentAccount = momoAccount.trim();
+      paymentNotes = paymentAccount ? `MoMo Account: ${paymentAccount}` : "MoMo Payment";
+    } else if (paymentType === "Bank") {
+      parsedAmountPaid = bankAmount !== "" ? Number(bankAmount) : total;
+      paymentAccount = bankAccount.trim();
+      paymentNotes = paymentAccount ? `Bank Account: ${paymentAccount}` : "Bank Transfer";
+    } else {
+      parsedAmountPaid = total;
+    }
+
     setIsSaving(true);
     try {
       const sale = await onCompleteSale({
         customer: getCustomerPayload(),
         lines: cartLines,
         paymentType,
-        amountPaid: parsedDownPayment,
+        amountPaid: parsedAmountPaid,
         dueDate: paymentType === "Credit" ? dueDate : null,
+        notes: paymentNotes,
       });
       const receipt = {
         reference: sale.reference,
@@ -747,7 +641,8 @@ export function Sales({
         paymentType,
         total,
         profit,
-        amountPaid: parsedDownPayment,
+        amountPaid: parsedAmountPaid,
+        paymentAccount: paymentAccount || undefined,
         dueDate: paymentType === "Credit" ? dueDate : null,
         amountTendered: hasCashChange ? tenderedNum : undefined,
         changeDue: hasCashChange ? changeDue : undefined,
@@ -757,6 +652,10 @@ export function Sales({
       setLastReceipt(receipt);
       setCart([]);
       setCashTendered("");
+      setMomoAccount("");
+      setMomoAmount("");
+      setBankAccount("");
+      setBankAmount("");
       setCustomerMode("walk-in");
       setSelectedCustomerId("");
       setNewCustomerName("");
@@ -765,6 +664,9 @@ export function Sales({
       setDueDate("");
       setSuccessMessage(`Sale ${sale.reference} recorded.`);
       showToast(`Sale ${sale.reference} recorded.`, { type: "success" });
+      if (business?.auto_print_receipt) {
+        printThermalReceipt(receipt, business);
+      }
       // clear success message after a short delay
       setTimeout(() => setSuccessMessage(""), 4000);
     } catch (error) {
@@ -777,8 +679,9 @@ export function Sales({
             customer: getCustomerPayload(),
             lines: cartLines,
             paymentType,
-            amountPaid: parsedDownPayment || null,
+            amountPaid: parsedAmountPaid,
             dueDate: paymentType === "Credit" ? dueDate || null : null,
+            notes: paymentNotes,
           });
           showToast("No network — sale saved to IndexedDB offline queue.", { type: "warn" });
           setActionError("Saved offline — will sync when connection resumes.");
@@ -789,7 +692,8 @@ export function Sales({
             paymentType,
             total,
             profit,
-            amountPaid: parsedDownPayment || 0,
+            amountPaid: parsedAmountPaid,
+            paymentAccount: paymentAccount || undefined,
             dueDate: paymentType === "Credit" ? dueDate || null : null,
             amountTendered: hasCashChange ? tenderedNum : undefined,
             changeDue: hasCashChange ? changeDue : undefined,
@@ -798,6 +702,13 @@ export function Sales({
           setLastReceipt(draftReceipt);
           setCart([]);
           setCashTendered("");
+          setMomoAccount("");
+          setMomoAmount("");
+          setBankAccount("");
+          setBankAmount("");
+          if (business?.auto_print_receipt) {
+            printThermalReceipt(draftReceipt, business);
+          }
           await readQueueItems();
         } catch (qErr) {
           console.error("Failed to queue sale", qErr);
@@ -826,28 +737,29 @@ export function Sales({
     }
   };
 
-  const printReceipt = () => {
+  const printReceipt = (receiptToPrint) => {
     setActionError("");
 
-    if (!lastReceipt) {
+    // Guard against React SyntheticEvent or invalid receipt passed via onClick
+    const isSyntheticEvent =
+      receiptToPrint &&
+      typeof receiptToPrint === "object" &&
+      ("nativeEvent" in receiptToPrint || "_reactName" in receiptToPrint || "target" in receiptToPrint);
+
+    const targetReceipt =
+      receiptToPrint && typeof receiptToPrint === "object" && !isSyntheticEvent && (receiptToPrint.lines || receiptToPrint.reference)
+        ? receiptToPrint
+        : lastReceipt;
+
+    if (!targetReceipt) {
       setActionError("Complete a sale before printing a receipt.");
       return;
     }
 
-    const is80mm = business?.receipt_width === "80mm";
-    const windowOpts = is80mm ? "width=440,height=680" : "width=340,height=600";
-    const printWindow = window.open("", "_blank", windowOpts);
-    if (!printWindow) {
+    const ok = printThermalReceipt(targetReceipt, business, () => {
       setActionError("Allow pop-ups to print the receipt.");
-      return;
-    }
-
-    printWindow.document.write(buildReceiptHtml(lastReceipt, business));
-    printWindow.document.close();
-    setTimeout(() => {
-      printWindow.focus();
-      printWindow.print();
-    }, 250);
+    });
+    return ok;
   };
 
   const shareReceipt = async () => {
@@ -1192,12 +1104,197 @@ export function Sales({
                 );
               })}
             </div>
-            {paymentType === "MoMo" && business?.momo_details ? (
-              <div className="mt-2.5 rounded-xl border border-sky-200 bg-sky-50/70 p-2.5 text-xs text-sky-900 flex items-center gap-2">
-                <Smartphone className="h-4 w-4 text-sky-600 shrink-0" />
-                <span className="font-semibold">
-                  MoMo Merchant: <strong className="font-black text-ink">{business.momo_details}</strong>
-                </span>
+            {/* MoMo Payment Details & Amount Paid */}
+            {paymentType === "MoMo" && total > 0 ? (
+              <div className="mt-3 rounded-2xl border border-amber-300/80 bg-amber-50/50 p-3.5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                    <Smartphone className="h-4 w-4 text-amber-600" />
+                    <span>MoMo Transfer Details</span>
+                  </p>
+                  <span className="text-[10px] font-bold rounded-full bg-amber-100 text-amber-800 px-2 py-0.5">
+                    Mobile Money
+                  </span>
+                </div>
+
+                {business?.momo_details ? (
+                  <div className="rounded-xl border border-amber-200 bg-white p-2 text-xs text-amber-900 flex items-center gap-2">
+                    <Smartphone className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                    <span>
+                      Shop MoMo Merchant: <strong className="font-black text-ink">{business.momo_details}</strong>
+                    </span>
+                  </div>
+                ) : null}
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700">
+                      Customer MoMo Phone / Account #
+                    </label>
+                    {activeCustomerPhone && momoAccount !== activeCustomerPhone ? (
+                      <button
+                        type="button"
+                        onClick={() => setMomoAccount(activeCustomerPhone)}
+                        className="text-[11px] font-bold text-palm hover:underline"
+                      >
+                        Use Customer Phone
+                      </button>
+                    ) : null}
+                  </div>
+                  <input
+                    type="text"
+                    className="field mt-1 text-sm font-semibold bg-white border-amber-200 focus:border-amber-500 focus:ring-amber-500/20"
+                    placeholder="e.g. 0244123456 (MTN) or Transaction ID"
+                    value={momoAccount}
+                    onChange={(event) => setMomoAccount(event.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700">
+                      Amount Paid via MoMo (GH₵)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setMomoAmount(String(total))}
+                        className="text-[11px] font-bold text-amber-800 hover:underline"
+                      >
+                        Exact ({formatCurrency(total)})
+                      </button>
+                      {momoAmount ? (
+                        <button
+                          type="button"
+                          onClick={() => setMomoAmount("")}
+                          className="text-[11px] font-bold text-slate-400 hover:text-red-600 transition"
+                        >
+                          Clear
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="field mt-1 text-base font-black text-ink bg-white border-amber-200 focus:border-amber-500 focus:ring-amber-500/20"
+                    placeholder={`e.g. ${total.toFixed(2)}`}
+                    value={momoAmount}
+                    onChange={(event) => setMomoAmount(event.target.value)}
+                  />
+                </div>
+
+                <div className="rounded-xl bg-white p-3 border border-amber-200/80 space-y-1.5 text-xs font-bold shadow-xs">
+                  <div className="flex justify-between text-slate-500">
+                    <span>Cart Total:</span>
+                    <span>{formatCurrency(total)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-800">
+                    <span>MoMo Amount Keyed:</span>
+                    <span className="font-black text-ink">
+                      {formatCurrency(momoAmount !== "" ? Number(momoAmount) : total)}
+                    </span>
+                  </div>
+                  {momoAmount !== "" && Number(momoAmount) < total ? (
+                    <div className="flex justify-between border-t border-amber-100 pt-1.5 text-red-600 font-black">
+                      <span>Remaining Balance Due:</span>
+                      <span>{formatCurrency(total - Number(momoAmount))}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 border-t border-amber-100 pt-1.5 text-emerald-700 font-black">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      <span>Full MoMo payment confirmed</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Bank Payment Details & Amount Paid */}
+            {paymentType === "Bank" && total > 0 ? (
+              <div className="mt-3 rounded-2xl border border-sky-300/80 bg-sky-50/50 p-3.5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-black uppercase tracking-wider text-sky-900 flex items-center gap-1.5">
+                    <CreditCard className="h-4 w-4 text-sky-600" />
+                    <span>Bank Transfer / Deposit Details</span>
+                  </p>
+                  <span className="text-[10px] font-bold rounded-full bg-sky-100 text-sky-800 px-2 py-0.5">
+                    Bank Transfer
+                  </span>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block">
+                    Bank Name & Account / Transfer Reference
+                  </label>
+                  <input
+                    type="text"
+                    className="field mt-1 text-sm font-semibold bg-white border-sky-200 focus:border-sky-500 focus:ring-sky-500/20"
+                    placeholder="e.g. GCB Transfer, Ecobank, Cheque #, or Ref"
+                    value={bankAccount}
+                    onChange={(event) => setBankAccount(event.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700">
+                      Amount Paid via Bank (GH₵)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setBankAmount(String(total))}
+                        className="text-[11px] font-bold text-sky-800 hover:underline"
+                      >
+                        Exact ({formatCurrency(total)})
+                      </button>
+                      {bankAmount ? (
+                        <button
+                          type="button"
+                          onClick={() => setBankAmount("")}
+                          className="text-[11px] font-bold text-slate-400 hover:text-red-600 transition"
+                        >
+                          Clear
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="field mt-1 text-base font-black text-ink bg-white border-sky-200 focus:border-sky-500 focus:ring-sky-500/20"
+                    placeholder={`e.g. ${total.toFixed(2)}`}
+                    value={bankAmount}
+                    onChange={(event) => setBankAmount(event.target.value)}
+                  />
+                </div>
+
+                <div className="rounded-xl bg-white p-3 border border-sky-200/80 space-y-1.5 text-xs font-bold shadow-xs">
+                  <div className="flex justify-between text-slate-500">
+                    <span>Cart Total:</span>
+                    <span>{formatCurrency(total)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-800">
+                    <span>Bank Amount Keyed:</span>
+                    <span className="font-black text-ink">
+                      {formatCurrency(bankAmount !== "" ? Number(bankAmount) : total)}
+                    </span>
+                  </div>
+                  {bankAmount !== "" && Number(bankAmount) < total ? (
+                    <div className="flex justify-between border-t border-sky-100 pt-1.5 text-red-600 font-black">
+                      <span>Remaining Balance Due:</span>
+                      <span>{formatCurrency(total - Number(bankAmount))}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 border-t border-sky-100 pt-1.5 text-emerald-700 font-black">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      <span>Full bank deposit confirmed</span>
+                    </div>
+                  )}
+                </div>
               </div>
             ) : null}
             {paymentType === "Cash" && total > 0 ? (
@@ -1501,7 +1598,7 @@ export function Sales({
             <Button icon={Copy} variant="secondary" disabled={!lastReceipt} onClick={copyReceiptText}>
               Copy receipt text
             </Button>
-            <Button icon={Printer} variant="secondary" disabled={!lastReceipt} onClick={printReceipt}>
+            <Button icon={Printer} variant="secondary" disabled={!lastReceipt} onClick={() => printReceipt(lastReceipt)}>
               Print receipt ({business?.receipt_width || "58mm"})
             </Button>
             <Button icon={Send} variant="secondary" disabled={!lastReceipt} onClick={shareReceipt}>
@@ -1555,8 +1652,13 @@ function ReceiptPreview({ business, receipt }) {
       <div className="p-4">
         <div className="flex items-center justify-between text-xs font-bold text-slate-500">
           <span>{receipt?.reference || "Draft receipt"}</span>
-          <span>{receipt?.paymentType || "MoMo"}</span>
+          <span>{receipt?.paymentType || "Cash"}</span>
         </div>
+        {receipt?.paymentAccount ? (
+          <p className="mt-1 text-xs font-black text-palm">
+            Account / Ref: {receipt.paymentAccount}
+          </p>
+        ) : null}
         <p className="mt-2 text-xs font-bold text-slate-500">
           Customer: {receipt?.customerName || "Walk-in"}
         </p>
@@ -1582,16 +1684,18 @@ function ReceiptPreview({ business, receipt }) {
             <span>Total</span>
             <span>{formatCurrency(receipt?.total || 0)}</span>
           </div>
-          {receipt?.paymentType === "Credit" || (receipt?.amountPaid !== undefined && receipt?.amountPaid < receipt?.total) ? (
+          {receipt?.amountPaid !== undefined && (receipt?.paymentType === "MoMo" || receipt?.paymentType === "Bank" || receipt?.paymentType === "Credit" || receipt?.amountPaid < receipt?.total) ? (
             <>
               <div className="flex justify-between text-xs font-bold text-palm pt-1 border-t border-slate-100">
-                <span>Amount Paid</span>
+                <span>Amount Paid ({receipt?.paymentType || "Paid"})</span>
                 <span>{formatCurrency(receipt?.amountPaid || 0)}</span>
               </div>
-              <div className="flex justify-between text-xs font-black text-red-600">
-                <span>Balance Due</span>
-                <span>{formatCurrency(Math.max(0, (receipt?.total || 0) - (receipt?.amountPaid || 0)))}</span>
-              </div>
+              {receipt?.amountPaid < receipt?.total ? (
+                <div className="flex justify-between text-xs font-black text-red-600">
+                  <span>Balance Due</span>
+                  <span>{formatCurrency(Math.max(0, (receipt?.total || 0) - (receipt?.amountPaid || 0)))}</span>
+                </div>
+              ) : null}
               {receipt?.dueDate ? (
                 <div className="flex justify-between text-xs font-semibold text-slate-500 pt-1 border-t border-slate-100">
                   <span>Credit Due Date</span>

@@ -16,10 +16,12 @@ import {
   Store,
   UsersRound,
   WalletCards,
+  Zap,
 } from "lucide-react";
 import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
 import { formatCurrency } from "../../lib/formatters.js";
+import { printThermalReceipt, sampleTestReceipt } from "../../lib/receiptHtml.js";
 import { showToast } from "../../lib/toast.js";
 
 const fallbackBusiness = {
@@ -30,6 +32,12 @@ const fallbackBusiness = {
   location: "",
   logoText: "BT",
 };
+
+const returnPolicyPresets = [
+  "Goods sold in good condition are not returnable after 3 days",
+  "Exchange only within 7 days with original receipt",
+  "No refunds. Store credit only",
+];
 
 function toBusinessForm(business) {
   return {
@@ -45,6 +53,7 @@ function toBusinessForm(business) {
     receipt_width: business?.receipt_width || "58mm",
     receipt_footer:
       business?.receipt_footer || "Thank you for your patronage! Visit again.",
+    auto_print_receipt: Boolean(business?.auto_print_receipt),
   };
 }
 
@@ -111,6 +120,7 @@ export function More({
         return_policy: form.return_policy.trim(),
         receipt_width: form.receipt_width,
         receipt_footer: form.receipt_footer.trim(),
+        auto_print_receipt: form.auto_print_receipt,
       });
       setProfileSuccess("Business profile updated successfully.");
       showToast("Business profile updated successfully", { type: "success" });
@@ -145,6 +155,7 @@ export function More({
         return_policy: form.return_policy.trim(),
         receipt_width: form.receipt_width,
         receipt_footer: form.receipt_footer.trim(),
+        auto_print_receipt: form.auto_print_receipt,
       });
       setReceiptSuccess("Receipt & thermal printer settings saved successfully.");
       showToast("Receipt settings saved successfully", { type: "success" });
@@ -156,6 +167,26 @@ export function More({
       setReceiptSaving(false);
     }
   }
+
+  const handlePrintTestReceipt = () => {
+    const testBusiness = {
+      name: form.name || business?.name || "BizTrac",
+      phone: form.phone || business?.phone || "",
+      location: form.location || business?.location || "",
+      receipt_width: form.receipt_width,
+      slogan: form.slogan,
+      momo_details: form.momo_details,
+      return_policy: form.return_policy,
+      receipt_footer: form.receipt_footer,
+    };
+
+    const printed = printThermalReceipt(sampleTestReceipt, testBusiness, () => {
+      showToast("Please allow pop-ups to print the test receipt.", { type: "warn" });
+    });
+    if (printed) {
+      showToast(`Printing ${form.receipt_width} test receipt…`, { type: "info" });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -362,10 +393,11 @@ export function More({
                     <button
                       key={pw.id}
                       type="button"
-                      className={`p-3 rounded-2xl border text-left transition active:scale-95 ${form.receipt_width === pw.id
+                      className={`p-3 rounded-2xl border text-left transition active:scale-95 ${
+                        form.receipt_width === pw.id
                           ? "bg-palm text-white border-palm shadow-sm ring-2 ring-palm/20"
                           : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                        }`}
+                      }`}
                       onClick={() => updateField("receipt_width", pw.id)}
                     >
                       <p className="font-black text-xs sm:text-sm">{pw.label}</p>
@@ -375,6 +407,27 @@ export function More({
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Auto-Print on Sale Toggle */}
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 transition hover:bg-slate-50">
+                <label className="flex items-center justify-between cursor-pointer gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-black text-ink flex items-center gap-1.5">
+                      <Zap className="h-4 w-4 text-amber-500 fill-amber-500" />
+                      <span>Auto-Print on Sale</span>
+                    </p>
+                    <p className="text-[11px] font-medium text-slate-500 mt-0.5">
+                      Automatically opens thermal print dialog immediately when clicking &quot;Complete Sale&quot; to speed up counter checkout.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    className="h-5 w-5 rounded border-slate-300 text-palm focus:ring-palm/20 accent-palm cursor-pointer shrink-0"
+                    checked={form.auto_print_receipt}
+                    onChange={(e) => updateField("auto_print_receipt", e.target.checked)}
+                  />
+                </label>
               </div>
 
               <label>
@@ -400,8 +453,12 @@ export function More({
                 />
               </label>
 
-              <label>
-                <span className="label">Return / Exchange Policy</span>
+              {/* Return / Exchange Policy with Ghanaian SME Quick-Chips */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="label">Return / Exchange Policy</span>
+                  <span className="text-[11px] font-bold text-slate-400">Presets</span>
+                </div>
                 <textarea
                   rows={2}
                   className="field mt-2 h-20 resize-none py-2 text-xs"
@@ -409,7 +466,26 @@ export function More({
                   value={form.return_policy}
                   onChange={(event) => updateField("return_policy", event.target.value)}
                 />
-              </label>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {returnPolicyPresets.map((preset) => {
+                    const isSelected = form.return_policy.trim() === preset;
+                    return (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => updateField("return_policy", preset)}
+                        className={`rounded-xl border px-2.5 py-1 text-[11px] font-bold transition active:scale-95 ${
+                          isSelected
+                            ? "border-palm bg-palm/10 text-palm ring-1 ring-palm/30"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-palm/40 hover:bg-slate-50"
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
               <label>
                 <span className="label">Receipt Footer Thank You Message</span>
@@ -436,9 +512,19 @@ export function More({
                 {receiptSuccess}
               </div>
             ) : null}
-            <Button icon={Printer} isLoading={receiptSaving} type="submit">
-              Save Receipt Settings
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button icon={Printer} isLoading={receiptSaving} type="submit" className="flex-1">
+                Save Receipt Settings
+              </Button>
+              <button
+                type="button"
+                onClick={handlePrintTestReceipt}
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-black text-slate-700 shadow-sm transition hover:border-palm hover:text-palm active:scale-95"
+              >
+                <Printer className="h-4 w-4" />
+                <span>Print Test Receipt</span>
+              </button>
+            </div>
           </div>
         </form>
 
@@ -455,15 +541,23 @@ export function More({
                   <h3 className="text-base font-black text-ink">Thermal Receipt ({form.receipt_width})</h3>
                 </div>
               </div>
-              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-black uppercase text-slate-600">
-                {form.receipt_width} Roll
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrintTestReceipt}
+                  className="rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-700 hover:border-palm hover:text-palm shadow-xs transition active:scale-95 flex items-center gap-1"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  <span>Test Print</span>
+                </button>
+              </div>
             </div>
 
             <div className="mt-4 flex justify-center bg-slate-100/70 p-4 rounded-2xl overflow-x-auto">
               <div
-                className={`bg-white text-black p-4 shadow-md font-mono text-[11px] leading-tight space-y-2 rounded-lg border border-slate-300 transition-all ${form.receipt_width === "80mm" ? "w-72" : "w-56"
-                  }`}
+                className={`bg-white text-black p-4 shadow-md font-mono text-[11px] leading-tight space-y-2 rounded-lg border border-slate-300 transition-all ${
+                  form.receipt_width === "80mm" ? "w-72" : "w-56"
+                }`}
               >
                 <div className="text-center space-y-0.5">
                   <p className="font-bold uppercase text-xs sm:text-sm tracking-wide">
