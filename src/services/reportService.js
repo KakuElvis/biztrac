@@ -1,4 +1,3 @@
-import { debtors as demoDebtors, reportSeries as demoReportSeries } from "../lib/mockData.js";
 import {
   requireSupabase,
   toNumber,
@@ -145,30 +144,6 @@ export const emptyReportSummary = {
   bestSellers: [],
   debtors: [],
 };
-
-export function getDemoReportSummary(products = []) {
-  const salesTotal = demoReportSeries.reduce((sum, point) => sum + point.sales, 0);
-  const expenseTotal = demoReportSeries.reduce((sum, point) => sum + point.expenses, 0);
-  const bestSellers = [...products]
-    .filter((product) => product.soldToday)
-    .sort((a, b) => b.soldToday - a.soldToday)
-    .slice(0, 3)
-    .map((product) => ({
-      id: product.id,
-      name: product.name,
-      quantity: product.soldToday,
-      amount: product.sellingPrice * product.soldToday,
-    }));
-
-  return {
-    series: demoReportSeries,
-    salesTotal,
-    expenseTotal,
-    profitTotal: salesTotal - expenseTotal,
-    bestSellers,
-    debtors: demoDebtors,
-  };
-}
 
 export async function getReportSummary(businessId, { range = "weekly", startDate, endDate } = {}) {
   const client = requireSupabase();

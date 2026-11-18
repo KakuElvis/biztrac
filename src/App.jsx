@@ -29,6 +29,13 @@ const screens = {
   more: More,
 };
 
+function getScreenFromUrl() {
+  if (typeof window === "undefined") return "dashboard";
+  const params = new URLSearchParams(window.location.search);
+  const screenParam = params.get("screen");
+  return screenParam && screens[screenParam] ? screenParam : "dashboard";
+}
+
 export default function App() {
   const { canInstall, isInstalled, isIOS, needRefresh, offlineReady, installApp, updateApp } = usePWA();
   const pwaState = {
@@ -44,21 +51,59 @@ export default function App() {
     session,
     workspace,
     workspaceLoading,
-    isDemo,
     isLoading,
     isRecoveringPassword,
     setIsRecoveringPassword,
     business,
-    setDemoBusinessProfile,
     handleSignOut: authSignOut,
-    startDemo: authStartDemo,
   } = useAuthSession();
 
-  const [activeScreen, setActiveScreen] = useState("dashboard");
+  const [activeScreen, setActiveScreen] = useState(getScreenFromUrl);
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
 
   const businessId = workspace?.business?.id;
-  const repository = getRepository(isDemo);
+  const repository = getRepository();
+
+  const handleNavigate = useCallback((nextScreen, { replace = false } = {}) => {
+    if (!screens[nextScreen]) return;
+
+    setActiveScreen(nextScreen);
+
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("screen", nextScreen);
+
+      if (replace) {
+        window.history.replaceState({ screen: nextScreen }, "", url.toString());
+      } else {
+        window.history.pushState({ screen: nextScreen }, "", url.toString());
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    // Initialize history state with current screen
+    const current = getScreenFromUrl();
+    const url = new URL(window.location.href);
+    url.searchParams.set("screen", current);
+    window.history.replaceState({ screen: current }, "", url.toString());
+
+    const handlePopState = (event) => {
+      const screenFromState = event.state?.screen;
+      const screenFromUrl = new URLSearchParams(window.location.search).get("screen");
+      const target = screenFromState || screenFromUrl || "dashboard";
+      if (screens[target]) {
+        setActiveScreen(target);
+      } else {
+        setActiveScreen("dashboard");
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   const {
     products,
@@ -82,7 +127,7 @@ export default function App() {
     fetchProductRestocks,
     handleCreateCategory,
     resetInventory,
-  } = useInventory(repository, businessId, isDemo);
+  } = useInventory(repository, businessId);
 
   const {
     dashboardSummary,
@@ -101,7 +146,7 @@ export default function App() {
     fetchProductStockTimeline,
     refreshAnalytics,
     resetAnalytics,
-  } = useAnalytics(repository, businessId, isDemo, products);
+  } = useAnalytics(repository, businessId);
 
   const {
     customers,
@@ -113,7 +158,7 @@ export default function App() {
     fetchCustomerDetails,
     handlePayDebt,
     resetCustomers,
-  } = useCustomers(repository, businessId, isDemo, refreshAnalytics);
+  } = useCustomers(repository, businessId, refreshAnalytics);
 
   const {
     expenses,
@@ -121,7 +166,7 @@ export default function App() {
     expensesError,
     handleCreateExpense,
     resetExpenses,
-  } = useExpenses(repository, businessId, session?.user?.id, isDemo, refreshAnalytics);
+  } = useExpenses(repository, businessId, session?.user?.id, refreshAnalytics);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -143,40 +188,17 @@ export default function App() {
     resetCustomers();
     resetExpenses();
     resetAnalytics();
-    setActiveScreen("dashboard");
+    handleNavigate("dashboard", { replace: true });
   }
 
   const handleSignOut = () => authSignOut(handleResetAll);
 
-  const handleStartDemo = () => authStartDemo(handleResetAll);
-
   const handleUpdateBusinessProfile = async (nextBusiness) => {
-    if (isDemo) {
-      const updated = await repository.updateBusiness("demo", nextBusiness, business);
-      setDemoBusinessProfile(updated);
-      return;
-    }
+    if (!workspace?.business?.id) return;
     await repository.updateBusiness(workspace.business.id, nextBusiness);
   };
 
   const handleCompleteSale = async ({ customer, lines, paymentType, amountPaid, dueDate }) => {
-    if (isDemo) {
-      const result = await repository.completeSale({
-        customer,
-        lines,
-        currentProducts: products,
-        paymentType,
-        amountPaid,
-        dueDate,
-      });
-      setProducts(result.updatedProducts);
-      if (result.newCustomer) {
-        setCustomers((current) => [...current, result.newCustomer]);
-      }
-      await refreshAnalytics();
-      return { reference: result.reference, sale: result.sale };
-    }
-
     const result = await repository.completeSale(businessId, {
       customer,
       lines,
@@ -221,7 +243,14 @@ export default function App() {
     await refreshAnalytics(businessId);
   }, [repository, businessId, setProducts, refreshAnalytics]);
 
-  const { queuedCount, isSyncing, refreshQueueCount, triggerSync } = useOfflineSync(
+  const {
+    queuedCount,
+    conflictedCount,
+    isSyncing,
+    refreshQueueCount,
+    triggerSync,
+    dismissAllConflicted,
+  } = useOfflineSync(
     handleCompleteSale,
     isOnline,
     handleSyncComplete
@@ -247,8 +276,8 @@ export default function App() {
     return <PasswordRecoveryScreen onComplete={() => setIsRecoveringPassword(false)} />;
   }
 
-  if (!session && !isDemo) {
-    return <AuthScreen onDemo={handleStartDemo} />;
+  if (!session) {
+    return <AuthScreen />;
   }
 
   const Screen = screens[activeScreen] ?? Dashboard;
@@ -259,9 +288,11 @@ export default function App() {
       business={business}
       lowStockCount={lowStockCount}
       isOnline={isOnline}
-      onNavigate={setActiveScreen}
+      onNavigate={handleNavigate}
       onSignOut={handleSignOut}
       queuedCount={queuedCount}
+      conflictedCount={conflictedCount}
+      onDismissConflicted={dismissAllConflicted}
       isSyncing={isSyncing}
       onTriggerSync={triggerSync}
       pwaState={pwaState}
@@ -269,8 +300,8 @@ export default function App() {
       <Suspense fallback={<div className="p-6">Loading…</div>}>
         <Screen
           business={business}
-          canDeleteProducts={isDemo || ["owner", "admin"].includes(workspace?.role)}
-          canManageCategories={isDemo || ["owner", "admin"].includes(workspace?.role)}
+          canDeleteProducts={["owner", "admin"].includes(workspace?.role)}
+          canManageCategories={["owner", "admin"].includes(workspace?.role)}
           categories={categories}
           categoriesError={categoriesError}
           categoriesLoading={categoriesLoading}
@@ -311,7 +342,7 @@ export default function App() {
           onFetchCustomerDetails={fetchCustomerDetails}
           onCreateCustomer={handleCreateCustomer}
           onPayDebt={handlePayDebt}
-          onNavigate={setActiveScreen}
+          onNavigate={handleNavigate}
           onSignOut={handleSignOut}
           queuedCount={queuedCount}
           isSyncing={isSyncing}

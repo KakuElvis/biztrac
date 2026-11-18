@@ -197,7 +197,7 @@ export async function restockProduct(businessId, productId, restockData) {
       supplier_name: (supplierName || "").trim(),
       notes: (notes || "").trim(),
     });
-  } catch (logErr) {
+  } catch {
     // Ignore error if product_restocks table is missing
   }
 

@@ -1,6 +1,6 @@
 # BizTrac
 
-BizTrac is a mobile-first business management PWA for Ghanaian SMEs. It supports Supabase-backed authentication, business workspaces, inventory, product categories, sales, expenses, reports, customers, and business settings, with a demo shop fallback when Supabase is not configured.
+BizTrac is a mobile-first business management PWA for Ghanaian SMEs. It supports Supabase-backed authentication, business workspaces, inventory, product categories, sales, expenses, reports, customers, and business settings.
 
 ## Stack
 
@@ -26,8 +26,6 @@ To enable live accounts and data:
    - `supabase/migrations/202607130001_product_categories.sql`
    - `supabase/migrations/202607130002_record_sale_rpc.sql`
 3. Add the project URL and anon key to `.env`.
-
-Without Supabase environment keys, the app remains available through **Use demo shop**.
 
 ## Checks
 

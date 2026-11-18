@@ -1,21 +1,13 @@
 import { useState, useEffect } from "react";
 import { showToast } from "../lib/toast.js";
-import { expenses as initialExpenses } from "../lib/mockData.js";
 
-export function useExpenses(repository, businessId, userId, isDemo, refreshAnalytics) {
+export function useExpenses(repository, businessId, userId, refreshAnalytics) {
   const [expenses, setExpenses] = useState([]);
   const [expensesLoading, setExpensesLoading] = useState(false);
   const [expensesError, setExpensesError] = useState("");
 
   useEffect(() => {
     let isMounted = true;
-
-    if (isDemo) {
-      setExpenses(initialExpenses);
-      setExpensesError("");
-      setExpensesLoading(false);
-      return undefined;
-    }
 
     if (!businessId) {
       setExpenses([]);
@@ -46,21 +38,21 @@ export function useExpenses(repository, businessId, userId, isDemo, refreshAnaly
     return () => {
       isMounted = false;
     };
-  }, [isDemo, businessId, repository]);
+  }, [businessId, repository]);
 
   const handleCreateExpense = async (expense) => {
     const nextExpense = await repository.createExpense(businessId, userId, expense);
     setExpenses((current) => [nextExpense, ...current]);
 
-    if (!isDemo && businessId) {
+    if (businessId) {
       refreshAnalytics?.(businessId);
     }
 
     return nextExpense;
   };
 
-  const resetExpenses = (demoExps = initialExpenses) => {
-    setExpenses(isDemo ? demoExps : []);
+  const resetExpenses = () => {
+    setExpenses([]);
   };
 
   return {

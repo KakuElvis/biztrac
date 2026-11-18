@@ -327,7 +327,7 @@ export function Customers({
         await onPayDebt(activePaymentCustomer.id, amountNum, payMethod);
       }
 
-      const ref = `DP-${new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0, 14)}`;
+      const ref = `DP-${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}`;
       const prevDebt = activePaymentCustomer.debt || 0;
       const remDebt = Math.max(0, prevDebt - amountNum);
 

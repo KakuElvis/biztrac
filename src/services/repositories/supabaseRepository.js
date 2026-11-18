@@ -1,6 +1,6 @@
 import { listProducts, createProduct, updateProduct, deleteProduct, restockProduct, listProductRestocks } from "../productService.js";
 import { listCategories, createCategory } from "../categoryService.js";
-import { listCustomers, createCustomer, updateCustomer, getCustomerDetails, payCustomerDebt } from "../customerService.js";
+import { listCustomers, createCustomer, updateCustomer, getCustomerDetails, payCustomerDebt, forgiveCustomerDebt } from "../customerService.js";
 import { listExpenses, createExpense } from "../expenseService.js";
 import { getDashboardSummary } from "../dashboardService.js";
 import { getReportSummary, getProductStockTimeline } from "../reportService.js";
@@ -16,8 +16,6 @@ import {
 } from "../offlineQueueService.js";
 
 export const supabaseRepository = {
-  isDemo: false,
-
   async listProducts(businessId, options) {
     try {
       const result = await listProducts(businessId, options);
@@ -104,6 +102,10 @@ export const supabaseRepository = {
 
   async payCustomerDebt(businessId, customerId, amount, paymentMethod) {
     return payCustomerDebt(businessId, customerId, amount, paymentMethod);
+  },
+
+  async forgiveCustomerDebt(businessId, customerId, options) {
+    return forgiveCustomerDebt(businessId, customerId, options);
   },
 
   async listExpenses(businessId) {

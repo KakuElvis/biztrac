@@ -34,6 +34,8 @@ export function AppShell({
   lowStockCount,
   onSignOut,
   queuedCount = 0,
+  conflictedCount = 0,
+  onDismissConflicted,
   isSyncing = false,
   onTriggerSync,
   pwaState = {},
@@ -174,6 +176,29 @@ export function AppShell({
                     className="rounded-xl bg-sky-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-sky-700 disabled:opacity-50"
                   >
                     {isSyncing ? "Syncing..." : "Sync Now"}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
+            {conflictedCount > 0 ? (
+              <div className="flex items-center justify-between gap-3 rounded-3xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <span className="grid h-6 min-w-6 place-items-center rounded-full bg-rose-600 px-1 text-xs font-black text-white">
+                    {conflictedCount}
+                  </span>
+                  <span>
+                    {conflictedCount === 1
+                      ? "1 offline sale encountered a conflict (e.g. stock depleted on server)."
+                      : `${conflictedCount} offline sales encountered conflicts.`}
+                  </span>
+                </div>
+                {onDismissConflicted ? (
+                  <button
+                    onClick={onDismissConflicted}
+                    className="rounded-xl bg-rose-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-rose-700"
+                  >
+                    Dismiss
                   </button>
                 ) : null}
               </div>

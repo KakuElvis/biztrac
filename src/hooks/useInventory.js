@@ -1,16 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { showToast } from "../lib/toast.js";
-import { products as initialProducts } from "../lib/mockData.js";
 import { supabase } from "../lib/supabase.js";
 import { toProduct } from "../services/productService.js";
 
-function categoriesFromProducts(products) {
-  return [...new Set(products.map((product) => product.category).filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b))
-    .map((name) => ({ id: name, name }));
-}
-
-export function useInventory(repository, businessId, isDemo) {
+export function useInventory(repository, businessId) {
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [productsError, setProductsError] = useState("");
@@ -34,14 +27,6 @@ export function useInventory(repository, businessId, isDemo) {
 
   useEffect(() => {
     let isMounted = true;
-
-    if (isDemo) {
-      setProducts(initialProducts);
-      setTotalCount(initialProducts.length);
-      setProductsError("");
-      setProductsLoading(false);
-      return undefined;
-    }
 
     if (!businessId) {
       setProducts([]);
@@ -77,10 +62,10 @@ export function useInventory(repository, businessId, isDemo) {
     return () => {
       isMounted = false;
     };
-  }, [isDemo, businessId, repository, page, pageSize]);
+  }, [businessId, repository, page, pageSize]);
 
   useEffect(() => {
-    if (isDemo || !businessId || !supabase) return undefined;
+    if (!businessId || !supabase) return undefined;
 
     const channel = supabase
       .channel(`products-realtime:${businessId}`)
@@ -99,16 +84,16 @@ export function useInventory(repository, businessId, isDemo) {
               if (current.some((item) => item.id === newProduct.id)) return current;
               return [newProduct, ...current].sort((a, b) => a.name.localeCompare(b.name));
             });
+            setTotalCount((c) => c + 1);
           } else if (payload.eventType === "UPDATE") {
             const updatedProduct = toProduct(payload.new);
             setProducts((current) =>
               current.map((item) => (item.id === updatedProduct.id ? updatedProduct : item))
             );
           } else if (payload.eventType === "DELETE") {
-            const deletedId = payload.old?.id;
-            if (deletedId) {
-              setProducts((current) => current.filter((item) => item.id !== deletedId));
-            }
+            const deletedId = payload.old.id;
+            setProducts((current) => current.filter((item) => item.id !== deletedId));
+            setTotalCount((c) => Math.max(0, c - 1));
           }
         }
       )
@@ -117,17 +102,10 @@ export function useInventory(repository, businessId, isDemo) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isDemo, businessId]);
+  }, [businessId]);
 
   useEffect(() => {
     let isMounted = true;
-
-    if (isDemo) {
-      setCategories(categoriesFromProducts(initialProducts));
-      setCategoriesError("");
-      setCategoriesLoading(false);
-      return undefined;
-    }
 
     if (!businessId) {
       setCategories([]);
@@ -158,7 +136,7 @@ export function useInventory(repository, businessId, isDemo) {
     return () => {
       isMounted = false;
     };
-  }, [isDemo, businessId, repository]);
+  }, [businessId, repository]);
 
   const handleCreateProduct = async (product) => {
     const nextProduct = await repository.createProduct(businessId, product);
@@ -212,9 +190,10 @@ export function useInventory(repository, businessId, isDemo) {
     return repository.listProductRestocks(businessId, productId);
   };
 
-  const resetInventory = (demoProds = initialProducts) => {
-    setProducts(isDemo ? demoProds : []);
-    setCategories(isDemo ? categoriesFromProducts(demoProds) : []);
+  const resetInventory = () => {
+    setProducts([]);
+    setCategories([]);
+    setTotalCount(0);
   };
 
   return {

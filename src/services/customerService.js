@@ -126,3 +126,20 @@ export async function payCustomerDebt(businessId, customerId, amount, paymentMet
   if (error) throw error;
   return data;
 }
+
+export async function forgiveCustomerDebt(
+  businessId,
+  customerId,
+  { saleId = null, reason = "Debt forgiven by business owner", status = "forgiven" } = {}
+) {
+  const { data, error } = await requireSupabase().rpc("forgive_customer_debt", {
+    p_business_id: businessId,
+    p_customer_id: customerId,
+    p_sale_id: saleId,
+    p_reason: reason,
+    p_status: status,
+  });
+
+  if (error) throw error;
+  return data;
+}

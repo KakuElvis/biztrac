@@ -1,34 +1,13 @@
 import { useState, useEffect } from "react";
 import { showToast } from "../lib/toast.js";
-import { debtors as initialDebtors } from "../lib/mockData.js";
 
-function customersFromDebtors(debtors) {
-  return debtors.map((debtor) => ({
-    id: debtor.id,
-    businessId: "demo",
-    name: debtor.name,
-    phone: "",
-    email: "",
-    notes: "",
-    debt: debtor.amount || 0,
-    due: debtor.due || "",
-  }));
-}
-
-export function useCustomers(repository, businessId, isDemo, refreshAnalytics) {
+export function useCustomers(repository, businessId, refreshAnalytics) {
   const [customers, setCustomers] = useState([]);
   const [customersLoading, setCustomersLoading] = useState(false);
   const [customersError, setCustomersError] = useState("");
 
   useEffect(() => {
     let isMounted = true;
-
-    if (isDemo) {
-      setCustomers(customersFromDebtors(initialDebtors));
-      setCustomersError("");
-      setCustomersLoading(false);
-      return undefined;
-    }
 
     if (!businessId) {
       setCustomers([]);
@@ -59,7 +38,7 @@ export function useCustomers(repository, businessId, isDemo, refreshAnalytics) {
     return () => {
       isMounted = false;
     };
-  }, [isDemo, businessId, repository]);
+  }, [businessId, repository]);
 
   const handleCreateCustomer = async (customer) => {
     const nextCustomer = await repository.createCustomer(businessId, customer);
@@ -79,7 +58,23 @@ export function useCustomers(repository, businessId, isDemo, refreshAnalytics) {
         return c;
       })
     );
-    if (!isDemo && businessId) {
+    if (businessId) {
+      refreshAnalytics?.(businessId);
+    }
+    return res;
+  };
+
+  const handleForgiveDebt = async (customerId, options) => {
+    const res = await repository.forgiveCustomerDebt(businessId, customerId, options);
+    setCustomers((current) =>
+      current.map((c) => {
+        if (String(c.id) === String(customerId)) {
+          return { ...c, debt: 0 };
+        }
+        return c;
+      })
+    );
+    if (businessId) {
       refreshAnalytics?.(businessId);
     }
     return res;
@@ -97,8 +92,8 @@ export function useCustomers(repository, businessId, isDemo, refreshAnalytics) {
     return repository.getCustomerDetails(businessId, customerId);
   };
 
-  const resetCustomers = (demoDebtors = initialDebtors) => {
-    setCustomers(isDemo ? customersFromDebtors(demoDebtors) : []);
+  const resetCustomers = () => {
+    setCustomers([]);
   };
 
   return {
@@ -110,6 +105,7 @@ export function useCustomers(repository, businessId, isDemo, refreshAnalytics) {
     handleUpdateCustomer,
     fetchCustomerDetails,
     handlePayDebt,
+    handleForgiveDebt,
     resetCustomers,
   };
 }

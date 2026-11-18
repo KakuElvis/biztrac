@@ -1,17 +1,33 @@
 import { useState, useEffect, useCallback } from "react";
-import { getQueuedSales, syncOfflineQueue } from "../services/offlineQueueService.js";
+import {
+  getQueuedSales,
+  getConflictedSales,
+  removeConflictedSale,
+  clearConflictedSales,
+  retryConflictedSale,
+  syncOfflineQueue,
+} from "../services/offlineQueueService.js";
 
 export function useOfflineSync(onCompleteSale, isOnline, onSyncComplete) {
   const [queuedCount, setQueuedCount] = useState(0);
+  const [conflictedCount, setConflictedCount] = useState(0);
+  const [conflictedSales, setConflictedSales] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
 
   const refreshQueueCount = useCallback(async () => {
     try {
-      const items = await getQueuedSales();
-      setQueuedCount(items.length);
+      const [queuedItems, conflictedItems] = await Promise.all([
+        getQueuedSales(),
+        getConflictedSales(),
+      ]);
+      setQueuedCount(queuedItems.length);
+      setConflictedCount(conflictedItems.length);
+      setConflictedSales(conflictedItems);
     } catch (error) {
       console.warn("[useOfflineSync] Error reading queue items:", error);
       setQueuedCount(0);
+      setConflictedCount(0);
+      setConflictedSales([]);
     }
   }, []);
 
@@ -39,6 +55,24 @@ export function useOfflineSync(onCompleteSale, isOnline, onSyncComplete) {
     }
   }, [onCompleteSale, isSyncing, isOnline, refreshQueueCount, onSyncComplete]);
 
+  const dismissConflicted = useCallback(async (id) => {
+    await removeConflictedSale(id);
+    await refreshQueueCount();
+  }, [refreshQueueCount]);
+
+  const dismissAllConflicted = useCallback(async () => {
+    await clearConflictedSales();
+    await refreshQueueCount();
+  }, [refreshQueueCount]);
+
+  const retryConflicted = useCallback(async (id) => {
+    await retryConflictedSale(id);
+    await refreshQueueCount();
+    if (isOnline) {
+      triggerSync();
+    }
+  }, [refreshQueueCount, isOnline, triggerSync]);
+
   useEffect(() => {
     refreshQueueCount();
   }, [refreshQueueCount]);
@@ -51,8 +85,13 @@ export function useOfflineSync(onCompleteSale, isOnline, onSyncComplete) {
 
   return {
     queuedCount,
+    conflictedCount,
+    conflictedSales,
     isSyncing,
     refreshQueueCount,
     triggerSync,
+    dismissConflicted,
+    dismissAllConflicted,
+    retryConflicted,
   };
 }

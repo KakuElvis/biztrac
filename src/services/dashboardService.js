@@ -1,10 +1,4 @@
 import {
-  debtors as demoDebtors,
-  expenses as demoExpenses,
-  products as demoProducts,
-  sales as demoSales,
-} from "../lib/mockData.js";
-import {
   requireSupabase,
   toNumber,
   shortReference,
@@ -79,31 +73,6 @@ function toDebtor(row, customerNames) {
     name: customerNames.get(row.customer_id) || shortReference(row),
     amount: Math.max(toNumber(row.total) - toNumber(row.amount_paid), 0),
     due: formatSaleTime(row.sold_at),
-  };
-}
-
-export function getDemoDashboardSummary(products = demoProducts) {
-  const todaySales = demoSales.reduce((total, sale) => total + sale.amount, 0);
-  const totalExpenses = demoExpenses.reduce((total, expense) => total + expense.amount, 0);
-  const totalDebtors = demoDebtors.reduce((total, debtor) => total + debtor.amount, 0);
-  const estimatedProfit =
-    products.reduce(
-      (total, product) =>
-        total + (product.sellingPrice - product.costPrice) * (product.soldToday || 0),
-      0
-    ) - totalExpenses;
-
-  return {
-    ...emptyDashboardSummary,
-    todaySales,
-    todayItemCount: demoSales.reduce((total, sale) => total + sale.items, 0),
-    totalExpenses,
-    expenseCount: demoExpenses.length,
-    estimatedProfit,
-    totalDebtors,
-    debtorCount: demoDebtors.length,
-    recentSales: demoSales,
-    debtors: demoDebtors,
   };
 }
 

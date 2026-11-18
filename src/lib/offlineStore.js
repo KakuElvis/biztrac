@@ -1,8 +1,9 @@
 const DB_NAME = "biztrac_offline_db";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const STORES = {
   QUEUED_SALES: "queued_sales",
+  CONFLICTED_SALES: "conflicted_sales",
   CACHED_CATALOG: "cached_catalog",
   CACHED_CUSTOMERS: "cached_customers",
 };
@@ -19,6 +20,9 @@ function openDB() {
       const db = event.target.result;
       if (!db.objectStoreNames.contains(STORES.QUEUED_SALES)) {
         db.createObjectStore(STORES.QUEUED_SALES, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(STORES.CONFLICTED_SALES)) {
+        db.createObjectStore(STORES.CONFLICTED_SALES, { keyPath: "id" });
       }
       if (!db.objectStoreNames.contains(STORES.CACHED_CATALOG)) {
         db.createObjectStore(STORES.CACHED_CATALOG, { keyPath: "id" });

@@ -22,7 +22,7 @@ import {
   updatePassword,
 } from "../../services/authService.js";
 
-export function AuthScreen({ onDemo }) {
+export function AuthScreen() {
   const [mode, setMode] = useState("register");
 
   return (
@@ -87,9 +87,9 @@ export function AuthScreen({ onDemo }) {
           </div>
 
           {mode === "register" ? (
-            <RegisterForm onDemo={onDemo} onSuccess={() => setMode("login")} />
+            <RegisterForm onSuccess={() => setMode("login")} />
           ) : (
-            <LoginForm onDemo={onDemo} />
+            <LoginForm />
           )}
         </div>
       </section>
@@ -166,7 +166,7 @@ export function PasswordRecoveryScreen({ onComplete }) {
   );
 }
 
-function RegisterForm({ onDemo, onSuccess }) {
+function RegisterForm({ onSuccess }) {
   const [isLoading, setIsLoading] = useState(false);
   const [notice, setNotice] = useState(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -299,17 +299,15 @@ function RegisterForm({ onDemo, onSuccess }) {
         />
       </div>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-[1fr_auto]">
+      <div className="mt-6">
         <Button
           type="submit"
+          className="w-full"
           icon={ArrowRight}
           isLoading={isLoading}
           disabled={!isSupabaseConfigured}
         >
           Create workspace
-        </Button>
-        <Button type="button" variant="secondary" onClick={onDemo}>
-          Use demo shop
         </Button>
       </div>
     </form>
@@ -343,7 +341,7 @@ function RegisterForm({ onDemo, onSuccess }) {
   );
 }
 
-function LoginForm({ onDemo }) {
+function LoginForm() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [notice, setNotice] = useState(null);
@@ -427,7 +425,7 @@ function LoginForm({ onDemo }) {
         </button>
       </div>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-[1fr_auto]">
+      <div className="mt-6">
         <Button
           type="submit"
           className="w-full"
@@ -436,9 +434,6 @@ function LoginForm({ onDemo }) {
           disabled={!isSupabaseConfigured}
         >
           Login
-        </Button>
-        <Button type="button" variant="secondary" onClick={onDemo}>
-          Use demo shop
         </Button>
       </div>
     </form>

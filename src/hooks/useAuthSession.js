@@ -1,12 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { getSession, getWorkspace, signOut, subscribeToAuthChanges } from "../services/authService.js";
 import { showToast } from "../lib/toast.js";
-import { business as demoBusiness } from "../lib/mockData.js";
 
 export function useAuthSession() {
   const [session, setSession] = useState(null);
-  const [isDemo, setIsDemo] = useState(false);
-  const [demoBusinessProfile, setDemoBusinessProfile] = useState(demoBusiness);
   const [isLoading, setIsLoading] = useState(true);
   const [isRecoveringPassword, setIsRecoveringPassword] = useState(false);
   const [workspace, setWorkspace] = useState(null);
@@ -29,7 +26,6 @@ export function useAuthSession() {
 
     const unsubscribe = subscribeToAuthChanges((nextSession, event) => {
       setSession(nextSession);
-      if (nextSession) setIsDemo(false);
       if (event === "PASSWORD_RECOVERY") setIsRecoveringPassword(true);
       setIsLoading(false);
     });
@@ -43,7 +39,7 @@ export function useAuthSession() {
   useEffect(() => {
     let isMounted = true;
 
-    if (!session?.user || isDemo) {
+    if (!session?.user) {
       setWorkspace(null);
       setWorkspaceLoading(false);
       return undefined;
@@ -65,11 +61,9 @@ export function useAuthSession() {
     return () => {
       isMounted = false;
     };
-  }, [session, isDemo]);
+  }, [session]);
 
   const business = useMemo(() => {
-    if (isDemo) return demoBusinessProfile;
-
     const fallbackOwner =
       session?.user?.user_metadata?.full_name || session?.user?.email || "there";
 
@@ -98,15 +92,9 @@ export function useAuthSession() {
       logoText: initials || "BT",
       owner: fallbackOwner,
     };
-  }, [demoBusinessProfile, isDemo, session, workspace]);
+  }, [session, workspace]);
 
   const handleSignOut = async (resetStates) => {
-    if (isDemo) {
-      setIsDemo(false);
-      resetStates?.();
-      return;
-    }
-
     try {
       await signOut();
       resetStates?.();
@@ -116,24 +104,14 @@ export function useAuthSession() {
     }
   };
 
-  const startDemo = (onDemoStart) => {
-    setDemoBusinessProfile(demoBusiness);
-    setIsDemo(true);
-    onDemoStart?.();
-  };
-
   return {
     session,
     workspace,
     workspaceLoading,
-    isDemo,
-    setIsDemo,
     isLoading,
     isRecoveringPassword,
     setIsRecoveringPassword,
     business,
-    setDemoBusinessProfile,
     handleSignOut,
-    startDemo,
   };
 }

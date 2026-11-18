@@ -617,9 +617,9 @@ export function Sales({
       return;
     }
 
+    const parsedDownPayment = paymentType === "Credit" && downPayment ? Number(downPayment) : 0;
     setIsSaving(true);
     try {
-      const parsedDownPayment = paymentType === "Credit" && downPayment ? Number(downPayment) : 0;
       const sale = await onCompleteSale({
         customer: getCustomerPayload(),
         lines: cartLines,
@@ -661,6 +661,8 @@ export function Sales({
             customer: getCustomerPayload(),
             lines: cartLines,
             paymentType,
+            amountPaid: parsedDownPayment || null,
+            dueDate: paymentType === "Credit" ? dueDate || null : null,
           });
           showToast("No network — sale saved to IndexedDB offline queue.", { type: "warn" });
           setActionError("Saved offline — will sync when connection resumes.");
@@ -671,6 +673,8 @@ export function Sales({
             paymentType,
             total,
             profit,
+            amountPaid: parsedDownPayment || 0,
+            dueDate: paymentType === "Credit" ? dueDate || null : null,
             createdAt,
           };
           setLastReceipt(draftReceipt);

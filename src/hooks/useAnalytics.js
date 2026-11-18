@@ -3,7 +3,7 @@ import { showToast } from "../lib/toast.js";
 import { emptyDashboardSummary } from "../services/dashboardService.js";
 import { emptyReportSummary } from "../services/reportService.js";
 
-export function useAnalytics(repository, businessId, isDemo, products) {
+export function useAnalytics(repository, businessId) {
   const [dashboardSummary, setDashboardSummary] = useState(emptyDashboardSummary);
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState("");
@@ -16,19 +16,7 @@ export function useAnalytics(repository, businessId, isDemo, products) {
   const [reportRefreshKey, setReportRefreshKey] = useState(0);
 
   useEffect(() => {
-    if (!isDemo) return;
-
-    repository
-      .getDashboardSummary("demo", products)
-      .then((summary) => setDashboardSummary(summary));
-    setDashboardError("");
-    setDashboardLoading(false);
-  }, [isDemo, products, repository]);
-
-  useEffect(() => {
     let isMounted = true;
-
-    if (isDemo) return undefined;
 
     if (!businessId) {
       setDashboardSummary(emptyDashboardSummary);
@@ -59,19 +47,10 @@ export function useAnalytics(repository, businessId, isDemo, products) {
     return () => {
       isMounted = false;
     };
-  }, [isDemo, businessId, repository]);
+  }, [businessId, repository]);
 
   useEffect(() => {
     let isMounted = true;
-
-    if (isDemo) {
-      repository
-        .getReportSummary("demo", {}, products)
-        .then((summary) => setReportSummary(summary));
-      setReportsError("");
-      setReportsLoading(false);
-      return undefined;
-    }
 
     if (!businessId) {
       setReportSummary(emptyReportSummary);
@@ -106,17 +85,9 @@ export function useAnalytics(repository, businessId, isDemo, products) {
     return () => {
       isMounted = false;
     };
-  }, [isDemo, products, businessId, reportRange, reportStartDate, reportEndDate, reportRefreshKey, repository]);
+  }, [businessId, reportRange, reportStartDate, reportEndDate, reportRefreshKey, repository]);
 
   const refreshAnalytics = async (bId = businessId) => {
-    if (isDemo) {
-      const dbSum = await repository.getDashboardSummary("demo", products);
-      const rptSum = await repository.getReportSummary("demo", {}, products);
-      setDashboardSummary(dbSum);
-      setReportSummary(rptSum);
-      return;
-    }
-
     if (!bId) return;
 
     const [nextDashboard, nextReport] = await Promise.allSettled([
@@ -149,7 +120,8 @@ export function useAnalytics(repository, businessId, isDemo, products) {
   };
 
   const fetchProductStockTimeline = async (productId) => {
-    return repository.getProductStockTimeline(businessId || "demo", productId);
+    if (!businessId) return null;
+    return repository.getProductStockTimeline(businessId, productId);
   };
 
   return {
