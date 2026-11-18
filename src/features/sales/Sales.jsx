@@ -1,17 +1,26 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useBackButtonModal } from "../../hooks/useBackButtonModal.js";
 import {
   AlertCircle,
+  ArrowRight,
+  Banknote,
   CheckCircle2,
+  Clock,
+  Coins,
   Copy,
+  CreditCard,
   MessageSquare,
   Minus,
   Plus,
   Printer,
   ReceiptText,
+  Search,
   Send,
   ShoppingBag,
+  Smartphone,
   Trash2,
   UserPlus,
+  X,
 } from "lucide-react";
 import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
@@ -46,7 +55,7 @@ function formatReceiptDate(value) {
 function buildReceiptText(receipt, business) {
   const businessName = business?.name || "BizTrac";
   const businessDetails = [business?.phone, business?.location].filter(Boolean).join(" | ");
-  const lines = receipt.lines
+  const lines = (receipt.lines || [])
     .map(
       (line) =>
         `${line.quantity} x ${line.name} @ ${formatCurrency(line.unitPrice)} = ${formatCurrency(
@@ -60,10 +69,16 @@ function buildReceiptText(receipt, business) {
     (receipt.amountPaid !== undefined && receipt.amountPaid < receipt.total);
   const amountPaid = receipt.amountPaid || 0;
   const balanceDue = Math.max(0, receipt.total - amountPaid);
+  const hasCashChange =
+    receipt.paymentType === "Cash" &&
+    receipt.amountTendered !== undefined &&
+    receipt.amountTendered >= receipt.total;
 
   return [
     businessName,
+    business?.slogan || "",
     businessDetails,
+    business?.momo_details ? `MoMo: ${business.momo_details}` : "",
     "",
     `Receipt: ${receipt.reference}`,
     `Date: ${formatReceiptDate(receipt.createdAt)}`,
@@ -74,10 +89,13 @@ function buildReceiptText(receipt, business) {
     lines,
     "",
     `Total: ${formatCurrency(receipt.total)}`,
+    hasCashChange ? `Cash Tendered: ${formatCurrency(receipt.amountTendered)}` : "",
+    hasCashChange && receipt.changeDue !== undefined ? `Change: ${formatCurrency(receipt.changeDue)}` : "",
     isCreditOrPartial ? `Amount Paid: ${formatCurrency(amountPaid)}` : "",
     isCreditOrPartial ? `Balance Due: ${formatCurrency(balanceDue)}` : "",
+    business?.return_policy ? `Return Policy: ${business.return_policy}` : "",
     "",
-    "Thank you.",
+    business?.receipt_footer || "Thank you for buying from us! Visit again.",
   ]
     .filter((line) => line !== "")
     .join("\n");
@@ -105,10 +123,16 @@ function buildWhatsAppReceiptText(receipt, business) {
     (receipt.amountPaid !== undefined && receipt.amountPaid < receipt.total);
   const amountPaid = receipt.amountPaid || 0;
   const balanceDue = Math.max(0, receipt.total - amountPaid);
+  const hasCashChange =
+    receipt.paymentType === "Cash" &&
+    receipt.amountTendered !== undefined &&
+    receipt.amountTendered >= receipt.total;
 
   const lines = [
     `🧾 *RECEIPT - ${businessName.toUpperCase()}*`,
+    business?.slogan ? `✨ _${business.slogan}_` : "",
     businessDetails ? `📍 ${businessDetails}` : "",
+    business?.momo_details ? `📱 *${business.momo_details}*` : "",
     `--------------------------------`,
     `🔢 *Ref:* ${receipt.reference || "Draft"}`,
     `📅 *Date:* ${formatReceiptDate(receipt.createdAt || new Date().toISOString())}`,
@@ -122,13 +146,25 @@ function buildWhatsAppReceiptText(receipt, business) {
     `💰 *TOTAL:* ${formatCurrency(receipt.total)}`,
   ];
 
+  if (hasCashChange) {
+    lines.push(`💵 *Cash Tendered:* ${formatCurrency(receipt.amountTendered)}`);
+    if (receipt.changeDue !== undefined) {
+      lines.push(`🔄 *Change Given:* ${formatCurrency(receipt.changeDue)}`);
+    }
+  }
+
   if (isCreditOrPartial) {
     lines.push(`💵 *Amount Paid:* ${formatCurrency(amountPaid)}`);
     lines.push(`⚠️ *Balance Due:* ${formatCurrency(balanceDue)}`);
   }
 
+  if (business?.return_policy) {
+    lines.push(`--------------------------------`);
+    lines.push(`ℹ️ _${business.return_policy}_`);
+  }
+
   lines.push("");
-  lines.push("🙏 *Thank you for buying from us!*");
+  lines.push(`🙏 *${business?.receipt_footer || "Thank you for buying from us! Visit again."}*`);
 
   return lines.filter((l) => l !== "").join("\n");
 }
@@ -244,16 +280,22 @@ function escapeHtml(value) {
 
 function buildReceiptHtml(receipt, business) {
   const businessName = escapeHtml(business?.name || "BizTrac");
-  const businessDetails = escapeHtml([business?.phone, business?.location].filter(Boolean).join(" | "));
-  const rows = receipt.lines
+  const businessDetails = escapeHtml([business?.phone, business?.location].filter(Boolean).join(" • "));
+  const is80mm = business?.receipt_width === "80mm";
+  const paperWidthCss = is80mm ? "72mm" : "48mm";
+  const fontSizeCss = is80mm ? "12px" : "11px";
+
+  const rows = (receipt.lines || [])
     .map(
       (line) => `
         <tr>
-          <td>
-            <strong>${escapeHtml(line.name)}</strong>
-            <span>${line.quantity} x ${escapeHtml(formatCurrency(line.unitPrice))}</span>
+          <td style="padding: 3px 0;">
+            <div style="font-weight: bold;">${escapeHtml(line.name)}</div>
+            <div style="font-size: 10px; color: #333;">${line.quantity} x ${escapeHtml(formatCurrency(line.unitPrice))}</div>
           </td>
-          <td>${escapeHtml(formatCurrency(line.total))}</td>
+          <td style="padding: 3px 0; text-align: right; font-weight: bold; vertical-align: top;">
+            ${escapeHtml(formatCurrency(line.total))}
+          </td>
         </tr>
       `
     )
@@ -264,112 +306,124 @@ function buildReceiptHtml(receipt, business) {
     (receipt.amountPaid !== undefined && receipt.amountPaid < receipt.total);
   const amountPaid = receipt.amountPaid || 0;
   const balanceDue = Math.max(0, receipt.total - amountPaid);
+  const hasCashChange =
+    receipt.paymentType === "Cash" &&
+    receipt.amountTendered !== undefined &&
+    receipt.amountTendered >= receipt.total;
 
   return `
     <!doctype html>
     <html>
       <head>
-        <title>${businessName} receipt ${escapeHtml(receipt.reference)}</title>
+        <title>${businessName} Receipt ${escapeHtml(receipt.reference || "")}</title>
         <style>
           * { box-sizing: border-box; }
-          body {
+          @page {
             margin: 0;
+            size: auto;
+          }
+          html, body {
+            margin: 0;
+            padding: 0;
             background: #fff;
-            color: #111827;
-            font-family: Arial, sans-serif;
-            font-size: 13px;
+            color: #000;
+            font-family: monospace, 'Courier New', Courier, sans-serif;
+            font-size: ${fontSizeCss};
+            line-height: 1.3;
           }
           .receipt {
-            width: 320px;
-            max-width: 100%;
+            width: ${paperWidthCss};
+            max-width: ${paperWidthCss};
             margin: 0 auto;
-            padding: 18px;
+            padding: 2mm;
           }
-          h1 {
-            margin: 0;
-            font-size: 18px;
-            text-align: center;
-          }
-          .muted {
-            color: #64748b;
-            font-size: 11px;
-            text-align: center;
-          }
+          .text-center { text-align: center; }
+          h1 { margin: 0; font-size: ${is80mm ? "16px" : "14px"}; text-transform: uppercase; font-weight: bold; }
+          .slogan { font-size: 10px; font-style: italic; margin: 2px 0; }
+          .details { font-size: 10px; margin: 2px 0 6px; }
+          .momo { border: 1px dashed #000; padding: 3px; margin: 4px 0; font-weight: bold; font-size: 10px; }
           .meta {
-            border-bottom: 1px dashed #cbd5e1;
-            border-top: 1px dashed #cbd5e1;
-            margin: 14px 0;
-            padding: 10px 0;
+            border-top: 1px dashed #000;
+            border-bottom: 1px dashed #000;
+            margin: 6px 0;
+            padding: 4px 0;
           }
-          .meta div,
-          .total,
-          .sub-row,
-          tr {
+          .meta div {
             display: flex;
             justify-content: space-between;
-            gap: 12px;
+            gap: 8px;
+            margin-top: 2px;
           }
           table {
             border-collapse: collapse;
             width: 100%;
-          }
-          td {
-            padding: 7px 0;
-            vertical-align: top;
-          }
-          td:first-child {
-            flex: 1;
-          }
-          td:last-child {
-            font-weight: 700;
-            text-align: right;
-            white-space: nowrap;
-          }
-          td span {
-            color: #64748b;
-            display: block;
-            font-size: 11px;
-            margin-top: 2px;
+            margin: 4px 0;
           }
           .total {
-            border-top: 1px dashed #cbd5e1;
-            font-size: 16px;
+            border-top: 1px dashed #000;
+            border-bottom: 1px dashed #000;
+            font-size: ${is80mm ? "14px" : "12px"};
             font-weight: 800;
-            margin-top: 12px;
-            padding-top: 12px;
+            margin-top: 6px;
+            padding: 6px 0;
+            display: flex;
+            justify-content: space-between;
           }
           .sub-row {
-            font-size: 12px;
-            margin-top: 6px;
+            display: flex;
+            justify-content: space-between;
+            margin-top: 3px;
+            font-size: 10px;
           }
-          .thanks {
-            margin-top: 18px;
+          .footer {
+            border-top: 1px dashed #000;
+            margin-top: 8px;
+            padding-top: 6px;
             text-align: center;
+            font-size: 9px;
           }
         </style>
       </head>
       <body>
         <main class="receipt">
-          <h1>${businessName}</h1>
-          <p class="muted">${businessDetails || "Receipt"}</p>
+          <div class="text-center">
+            <h1>${businessName}</h1>
+            ${business?.slogan ? `<p class="slogan">${escapeHtml(business.slogan)}</p>` : ""}
+            <p class="details">${businessDetails || "Sales Receipt"}</p>
+            ${business?.momo_details ? `<div class="momo">MoMo: ${escapeHtml(business.momo_details)}</div>` : ""}
+          </div>
           <section class="meta">
-            <div><span>Receipt</span><strong>${escapeHtml(receipt.reference)}</strong></div>
-            <div><span>Date</span><strong>${escapeHtml(formatReceiptDate(receipt.createdAt))}</strong></div>
-            <div><span>Customer</span><strong>${escapeHtml(receipt.customerName || "Walk-in")}</strong></div>
-            <div><span>Payment</span><strong>${escapeHtml(receipt.paymentType)}</strong></div>
-            ${receipt.dueDate ? `<div><span>Due Date</span><strong>${escapeHtml(formatReceiptDate(receipt.dueDate))}</strong></div>` : ""}
+            <div><span>Receipt:</span><strong>${escapeHtml(receipt.reference || "Draft")}</strong></div>
+            <div><span>Date:</span><strong>${escapeHtml(formatReceiptDate(receipt.createdAt || new Date().toISOString()))}</strong></div>
+            <div><span>Customer:</span><strong>${escapeHtml(receipt.customerName || "Walk-in")}</strong></div>
+            <div><span>Payment:</span><strong>${escapeHtml(receipt.paymentType || "Cash")}</strong></div>
+            ${receipt.dueDate ? `<div><span>Due Date:</span><strong>${escapeHtml(formatReceiptDate(receipt.dueDate))}</strong></div>` : ""}
           </section>
           <table><tbody>${rows}</tbody></table>
-          <div class="total"><span>Total</span><span>${escapeHtml(formatCurrency(receipt.total))}</span></div>
-          ${isCreditOrPartial ? `
-            <div class="sub-row" style="color: #027aec; font-weight: 700;">
-              <span>Amount Paid</span><span>${escapeHtml(formatCurrency(amountPaid))}</span>
+          <div class="total"><span>TOTAL:</span><span>${escapeHtml(formatCurrency(receipt.total))}</span></div>
+          ${hasCashChange ? `
+            <div class="sub-row">
+              <span>Cash Tendered:</span><span>${escapeHtml(formatCurrency(receipt.amountTendered))}</span>
             </div>
-            <div class="sub-row" style="color: #dc2626; font-weight: 800;">
-              <span>Balance Due</span><span>${escapeHtml(formatCurrency(balanceDue))}</span>
+            ${receipt.changeDue !== undefined ? `
+              <div class="sub-row" style="font-weight: bold;">
+                <span>Change Given:</span><span>${escapeHtml(formatCurrency(receipt.changeDue))}</span>
+              </div>
+            ` : ""}
+          ` : ""}
+          ${isCreditOrPartial ? `
+            <div class="sub-row">
+              <span>Amount Paid:</span><span>${escapeHtml(formatCurrency(amountPaid))}</span>
+            </div>
+            <div class="sub-row" style="font-weight: bold;">
+              <span>BALANCE DUE:</span><span>${escapeHtml(formatCurrency(balanceDue))}</span>
             </div>
           ` : ""}
-          <p class="thanks">Thank you.</p>
+          <div class="footer">
+            ${business?.return_policy ? `<p style="margin: 2px 0;">${escapeHtml(business.return_policy)}</p>` : ""}
+            <p style="margin: 4px 0; font-weight: bold;">${escapeHtml(business?.receipt_footer || "Thank you for buying from us! Visit again.")}</p>
+            <p style="margin: 2px 0; font-size: 8px; color: #555;">Powered by BizTrac</p>
+          </div>
         </main>
       </body>
     </html>
@@ -378,6 +432,7 @@ function buildReceiptHtml(receipt, business) {
 
 export function Sales({
   business,
+  categories = [],
   customers = [],
   customersError,
   customersLoading,
@@ -396,6 +451,9 @@ export function Sales({
   const queuedCount = propQueuedCount !== undefined ? propQueuedCount : localQueuedCount;
   const isSyncing = propIsSyncing !== undefined ? propIsSyncing : false;
   const [lastReceipt, setLastReceipt] = useState(null);
+
+  // Hook completed sale receipt into Android Back Button to reset counter
+  useBackButtonModal(Boolean(lastReceipt), () => setLastReceipt(null), "sales-receipt");
   const [paymentType, setPaymentType] = useState("MoMo");
   const [downPayment, setDownPayment] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -403,6 +461,54 @@ export function Sales({
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [productSearch, setProductSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [cashTendered, setCashTendered] = useState("");
+  const searchInputRef = useRef(null);
+  const checkoutSectionRef = useRef(null);
+
+  const scrollToCheckout = () => {
+    checkoutSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "/" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const availableCategories = useMemo(() => {
+    const fromProps = categories.map((c) => (typeof c === "string" ? c : c?.name)).filter(Boolean);
+    const fromProducts = products.map((p) => p.category).filter(Boolean);
+    return Array.from(new Set([...fromProps, ...fromProducts])).sort();
+  }, [categories, products]);
+
+  const filteredProducts = useMemo(() => {
+    let list = products;
+
+    if (selectedCategory !== "all") {
+      list = list.filter((p) => (p.category || "") === selectedCategory);
+    }
+
+    if (productSearch.trim()) {
+      const q = productSearch.trim().toLowerCase();
+      list = list.filter(
+        (p) =>
+          (p.name || "").toLowerCase().includes(q) ||
+          (p.sku && p.sku.toLowerCase().includes(q)) ||
+          (p.brand && p.brand.toLowerCase().includes(q)) ||
+          (p.size && p.size.toLowerCase().includes(q)) ||
+          (p.colour && p.colour.toLowerCase().includes(q))
+      );
+    }
+
+    return list;
+  }, [products, selectedCategory, productSearch]);
 
   const cartLines = cart
     .map((line) => {
@@ -416,6 +522,11 @@ export function Sales({
     (sum, line) => sum + (line.product.sellingPrice - line.product.costPrice) * (line.quantityNum || 0),
     0
   );
+
+  const tenderedNum = Number(cashTendered) || 0;
+  const hasCashChange = paymentType === "Cash" && cashTendered !== "" && tenderedNum >= total;
+  const changeDue = cashTendered !== "" ? tenderedNum - total : 0;
+
   const previewReceipt = cartLines.length
     ? {
         reference: "Draft receipt",
@@ -426,6 +537,8 @@ export function Sales({
         profit,
         amountPaid: paymentType === "Credit" && downPayment ? Number(downPayment) : 0,
         dueDate: paymentType === "Credit" ? dueDate : null,
+        amountTendered: hasCashChange ? tenderedNum : undefined,
+        changeDue: hasCashChange ? changeDue : undefined,
       }
     : lastReceipt;
 
@@ -636,11 +749,14 @@ export function Sales({
         profit,
         amountPaid: parsedDownPayment,
         dueDate: paymentType === "Credit" ? dueDate : null,
+        amountTendered: hasCashChange ? tenderedNum : undefined,
+        changeDue: hasCashChange ? changeDue : undefined,
         createdAt: new Date().toISOString(),
       };
 
       setLastReceipt(receipt);
       setCart([]);
+      setCashTendered("");
       setCustomerMode("walk-in");
       setSelectedCustomerId("");
       setNewCustomerName("");
@@ -675,10 +791,13 @@ export function Sales({
             profit,
             amountPaid: parsedDownPayment || 0,
             dueDate: paymentType === "Credit" ? dueDate || null : null,
+            amountTendered: hasCashChange ? tenderedNum : undefined,
+            changeDue: hasCashChange ? changeDue : undefined,
             createdAt,
           };
           setLastReceipt(draftReceipt);
           setCart([]);
+          setCashTendered("");
           await readQueueItems();
         } catch (qErr) {
           console.error("Failed to queue sale", qErr);
@@ -715,7 +834,9 @@ export function Sales({
       return;
     }
 
-    const printWindow = window.open("", "_blank", "width=380,height=640");
+    const is80mm = business?.receipt_width === "80mm";
+    const windowOpts = is80mm ? "width=440,height=680" : "width=340,height=600";
+    const printWindow = window.open("", "_blank", windowOpts);
     if (!printWindow) {
       setActionError("Allow pop-ups to print the receipt.");
       return;
@@ -801,7 +922,7 @@ export function Sales({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20 lg:pb-0">
       <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm font-bold text-palm">Sales</p>
@@ -823,35 +944,138 @@ export function Sales({
 
       <section className="grid gap-5 lg:grid-cols-[1fr_24rem]">
         <div className="space-y-4">
-          <div className="panel p-4">
-            <label className="label">Select product</label>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="panel p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <label className="label">Select product</label>
+                <span className="ml-2 text-xs font-bold text-slate-400">
+                  ({filteredProducts.length} {filteredProducts.length === 1 ? "item" : "items"})
+                </span>
+              </div>
+              <span className="hidden text-[11px] font-semibold text-slate-400 sm:inline">
+                Press <kbd className="rounded border border-slate-200 bg-slate-100 px-1 text-[10px] font-bold text-slate-500">/</kbd> to search
+              </span>
+            </div>
+
+            {/* Product Search Input */}
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={productSearch}
+                onChange={(e) => setProductSearch(e.target.value)}
+                placeholder="Search products by name, SKU, brand, size…"
+                className="field pl-10 pr-9 text-sm"
+              />
+              {productSearch ? (
+                <button
+                  type="button"
+                  onClick={() => setProductSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  aria-label="Clear search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
+
+            {/* Category Filter Chips */}
+            {availableCategories.length > 0 ? (
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory("all")}
+                  className={`shrink-0 rounded-xl px-3 py-1.5 font-bold transition ${
+                    selectedCategory === "all"
+                      ? "bg-palm text-white shadow-sm"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  All ({products.length})
+                </button>
+                {availableCategories.map((cat) => {
+                  const count = products.filter((p) => (p.category || "") === cat).length;
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`shrink-0 rounded-xl px-3 py-1.5 font-bold transition ${
+                        selectedCategory === cat
+                          ? "bg-palm text-white shadow-sm"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {cat} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            <div className="grid max-h-[30rem] gap-3 overflow-y-auto pr-0.5 sm:grid-cols-2">
               {!products.length ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-500 sm:col-span-2">
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-500 sm:col-span-2">
                   Add products in Inventory before recording a sale.
                 </div>
               ) : null}
-              {products.map((product) => (
-                <button
-                  key={product.id}
-                  className="flex min-h-24 items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-palm/40 hover:bg-skyglass disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={product.quantity <= 0}
-                  onClick={() => addToCart(product.id)}
-                >
-                  <span>
-                    <span className="block text-sm font-black text-ink">{product.name}</span>
-                    <span className="mt-1 block text-xs font-semibold text-slate-500">
-                      {product.size} | {product.colour}
+
+              {products.length > 0 && !filteredProducts.length ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center sm:col-span-2 space-y-1.5">
+                  <p className="text-sm font-bold text-ink">No products match your filter</p>
+                  <p className="text-xs text-slate-500">Try adjusting your search terms or category selection.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProductSearch("");
+                      setSelectedCategory("all");
+                    }}
+                    className="mt-2 inline-block text-xs font-bold text-palm hover:underline"
+                  >
+                    Clear search & filters
+                  </button>
+                </div>
+              ) : null}
+
+              {filteredProducts.map((product) => {
+                const inCartLine = cartLines.find((l) => l.productId === product.id);
+                const inCartQty = inCartLine ? inCartLine.quantityNum : 0;
+                const isOutOfStock = product.quantity <= 0;
+
+                return (
+                  <button
+                    key={product.id}
+                    className={`flex min-h-24 items-center justify-between gap-3 rounded-2xl border p-4 text-left transition active:scale-[0.98] ${
+                      inCartQty > 0
+                        ? "border-palm ring-2 ring-palm/20 bg-skyglass/40 shadow-sm"
+                        : "border-slate-200 bg-white hover:border-palm/40 hover:bg-skyglass/20 hover:shadow-xs"
+                    } ${isOutOfStock ? "cursor-not-allowed opacity-50" : ""}`}
+                    disabled={isOutOfStock}
+                    onClick={() => addToCart(product.id)}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-black text-ink truncate">{product.name}</span>
+                      <span className="mt-0.5 block text-xs font-semibold text-slate-500 truncate">
+                        {[product.size, product.colour, product.brand].filter(Boolean).join(" | ") || "Standard"}
+                      </span>
+                      <span className="mt-1.5 block text-sm font-black text-palm">
+                        {formatCurrency(product.sellingPrice)}
+                      </span>
                     </span>
-                    <span className="mt-2 block text-sm font-black text-palm">
-                      {formatCurrency(product.sellingPrice)}
-                    </span>
-                  </span>
-                  <Badge variant={product.quantity <= product.lowStockLimit ? "amber" : "slate"}>
-                    {product.quantity}
-                  </Badge>
-                </button>
-              ))}
+                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <Badge variant={isOutOfStock ? "slate" : product.quantity <= product.lowStockLimit ? "amber" : "slate"}>
+                        {isOutOfStock ? "Out of stock" : `${product.quantity} in stock`}
+                      </Badge>
+                      {inCartQty > 0 ? (
+                        <span className="rounded-full bg-palm px-2 py-0.5 text-[10px] font-black text-white shadow-sm">
+                          x{inCartQty} in cart
+                        </span>
+                      ) : null}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -859,12 +1083,32 @@ export function Sales({
             <div className="flex items-center justify-between">
               <div>
                 <p className="label">Cart</p>
-                <h2 className="mt-1 text-lg font-black text-ink">{cartLines.length} items selected</h2>
+                <h2 className="mt-1 text-lg font-black text-ink">
+                  {cartLines.length} {cartLines.length === 1 ? "item" : "items"} selected
+                </h2>
               </div>
-              <ShoppingBag className="h-5 w-5 text-slate-400" />
+              {cartLines.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setCart([])}
+                  className="text-xs font-bold text-slate-400 hover:text-red-600 transition"
+                >
+                  Clear cart
+                </button>
+              ) : (
+                <ShoppingBag className="h-5 w-5 text-slate-400" />
+              )}
             </div>
 
-            <div className="mt-4 divide-y divide-slate-100">
+            {!cartLines.length ? (
+              <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-6 text-center">
+                <ShoppingBag className="mx-auto h-8 w-8 text-slate-300" />
+                <p className="mt-2 text-sm font-bold text-slate-600">Cart is empty</p>
+                <p className="mt-0.5 text-xs text-slate-400">Select products above to add them to this sale</p>
+              </div>
+            ) : null}
+
+            <div className="mt-4 divide-y divide-slate-100 max-h-80 overflow-y-auto pr-1">
               {cartLines.map((line) => (
                 <div key={line.productId} className="flex items-center justify-between gap-3 py-3">
                   <div className="min-w-0 flex-1">
@@ -876,7 +1120,7 @@ export function Sales({
                   <div className="flex items-center gap-1.5 sm:gap-2">
                     <button
                       type="button"
-                      className="icon-button h-9 w-9 shrink-0"
+                      className="icon-button h-10 w-10 sm:h-9 sm:w-9 shrink-0 active:scale-90 transition"
                       onClick={() => changeQuantity(line.productId, -1)}
                       aria-label="Reduce quantity"
                     >
@@ -886,7 +1130,7 @@ export function Sales({
                       type="number"
                       min="1"
                       max={line.product.quantity}
-                      className="h-9 w-16 rounded-xl border border-slate-200 bg-slate-50 px-1 text-center text-sm font-black text-ink transition focus:border-palm focus:bg-white focus:outline-none focus:ring-2 focus:ring-palm/20"
+                      className="h-10 sm:h-9 w-16 rounded-xl border border-slate-200 bg-slate-50 px-1 text-center text-base sm:text-sm font-black text-ink transition focus:border-palm focus:bg-white focus:outline-none focus:ring-2 focus:ring-palm/20"
                       value={line.quantity}
                       onChange={(e) => updateQuantity(line.productId, e.target.value)}
                       onBlur={() => handleQuantityBlur(line.productId)}
@@ -895,7 +1139,7 @@ export function Sales({
                     />
                     <button
                       type="button"
-                      className="icon-button h-9 w-9 shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="icon-button h-10 w-10 sm:h-9 sm:w-9 shrink-0 disabled:cursor-not-allowed disabled:opacity-50 active:scale-90 transition"
                       disabled={Number(line.quantity) >= line.product.quantity}
                       onClick={() => changeQuantity(line.productId, 1)}
                       aria-label="Increase quantity"
@@ -904,7 +1148,7 @@ export function Sales({
                     </button>
                     <button
                       type="button"
-                      className="icon-button h-9 w-9 shrink-0 text-slate-400 hover:bg-red-50 hover:text-red-600 transition ml-1"
+                      className="icon-button h-10 w-10 sm:h-9 sm:w-9 shrink-0 text-slate-400 hover:bg-red-50 hover:text-red-600 active:scale-90 transition ml-1"
                       onClick={() => removeFromCart(line.productId)}
                       title="Remove item"
                       aria-label="Remove item"
@@ -918,24 +1162,138 @@ export function Sales({
           </div>
         </div>
 
-        <aside className="space-y-4">
+        <aside ref={checkoutSectionRef} className="space-y-4">
           <div className="panel p-4">
             <p className="label">Payment type</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              {paymentTypes.map((type) => (
-                <button
-                  key={type}
-                  className={`min-h-11 rounded-xl border text-sm font-black transition ${
-                    paymentType === type
-                      ? "border-palm bg-palm text-white"
-                      : "border-slate-200 bg-white text-slate-600"
-                  }`}
-                  onClick={() => setPaymentType(type)}
-                >
-                  {type}
-                </button>
-              ))}
+              {paymentTypes.map((type) => {
+                const Icon =
+                  type === "Cash"
+                    ? Banknote
+                    : type === "MoMo"
+                    ? Smartphone
+                    : type === "Bank"
+                    ? CreditCard
+                    : Clock;
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border text-sm font-black transition active:scale-95 ${
+                      paymentType === type
+                        ? "border-palm bg-palm text-white shadow-md shadow-palm/20"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-palm/40 hover:bg-slate-50"
+                    }`}
+                    onClick={() => setPaymentType(type)}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span>{type}</span>
+                  </button>
+                );
+              })}
             </div>
+            {paymentType === "MoMo" && business?.momo_details ? (
+              <div className="mt-2.5 rounded-xl border border-sky-200 bg-sky-50/70 p-2.5 text-xs text-sky-900 flex items-center gap-2">
+                <Smartphone className="h-4 w-4 text-sky-600 shrink-0" />
+                <span className="font-semibold">
+                  MoMo Merchant: <strong className="font-black text-ink">{business.momo_details}</strong>
+                </span>
+              </div>
+            ) : null}
+            {paymentType === "Cash" && total > 0 ? (
+              <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-3.5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                    <Banknote className="h-4 w-4 text-emerald-600" />
+                    <span>Cash Tendered & Change</span>
+                  </p>
+                  <span className="text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5">
+                    Calculator
+                  </span>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-600">
+                      Amount Received (GH₵)
+                    </label>
+                    {cashTendered ? (
+                      <button
+                        type="button"
+                        onClick={() => setCashTendered("")}
+                        className="text-[11px] font-bold text-slate-400 hover:text-red-600 transition"
+                      >
+                        Clear
+                      </button>
+                    ) : null}
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="field mt-1 text-base font-black text-ink bg-white border-emerald-300 focus:border-emerald-500 focus:ring-emerald-500/20"
+                    placeholder={`e.g. ${total.toFixed(2)}`}
+                    value={cashTendered}
+                    onChange={(event) => setCashTendered(event.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <p className="text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wide">
+                    Quick Cash Notes:
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      className="rounded-lg border border-emerald-300 bg-white px-2.5 py-1 text-xs font-black text-emerald-700 shadow-sm transition hover:bg-emerald-50"
+                      onClick={() => setCashTendered(String(total))}
+                    >
+                      Exact ({formatCurrency(total)})
+                    </button>
+                    {[10, 20, 50, 100, 200].map((note) => (
+                      <button
+                        key={note}
+                        type="button"
+                        className={`rounded-lg border px-2.5 py-1 text-xs font-bold transition ${
+                          Number(cashTendered) === note
+                            ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
+                            : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:bg-emerald-50/50"
+                        }`}
+                        onClick={() => setCashTendered(String(note))}
+                      >
+                        GH₵ {note}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {cashTendered !== "" ? (
+                  <div className="rounded-xl bg-white p-3 border border-emerald-200/80 space-y-1.5 text-xs font-bold shadow-sm">
+                    <div className="flex justify-between text-slate-500">
+                      <span>Cart Total:</span>
+                      <span>{formatCurrency(total)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-700">
+                      <span>Cash Handed:</span>
+                      <span>{formatCurrency(tenderedNum)}</span>
+                    </div>
+                    <div
+                      className={`flex justify-between items-center border-t pt-1.5 text-sm font-black ${
+                        changeDue >= 0
+                          ? "border-emerald-100 text-emerald-700"
+                          : "border-red-100 text-red-600"
+                      }`}
+                    >
+                      <span className="flex items-center gap-1">
+                        <Coins className="h-4 w-4" />
+                        <span>{changeDue >= 0 ? "Change to Customer:" : "Amount Still Needed:"}</span>
+                      </span>
+                      <span className="text-base">{formatCurrency(Math.abs(changeDue))}</span>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {paymentType === "Credit" ? (
               <div className="mt-3 rounded-2xl border border-palm/30 bg-sky-50/50 p-3.5 space-y-3">
                 <div className="flex items-center justify-between">
@@ -1144,7 +1502,7 @@ export function Sales({
               Copy receipt text
             </Button>
             <Button icon={Printer} variant="secondary" disabled={!lastReceipt} onClick={printReceipt}>
-              Print receipt
+              Print receipt ({business?.receipt_width || "58mm"})
             </Button>
             <Button icon={Send} variant="secondary" disabled={!lastReceipt} onClick={shareReceipt}>
               Share PDF receipt
@@ -1155,6 +1513,29 @@ export function Sales({
           </div>
         </aside>
       </section>
+
+      {/* Mobile Sticky Floating Cart Bar */}
+      {cartLines.length > 0 ? (
+        <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] inset-x-3 z-30 flex items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/95 p-3.5 text-white shadow-2xl backdrop-blur transition-all duration-200 animate-in fade-in slide-in-from-bottom lg:hidden">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-palm text-xs font-black text-white shadow-sm">
+              {cartLines.reduce((s, l) => s + (l.quantityNum || 0), 0)}
+            </span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Total Due</p>
+              <p className="truncate text-base font-black text-white">{formatCurrency(total)}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={scrollToCheckout}
+            className="flex shrink-0 items-center gap-1.5 rounded-xl bg-palm px-4 py-2.5 text-xs font-black text-white shadow-lg shadow-palm/30 transition hover:bg-palmDeep active:scale-95"
+          >
+            <span>Review & Pay</span>
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

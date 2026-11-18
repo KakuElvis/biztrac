@@ -31,8 +31,13 @@ textarea {
   font: inherit;
 }
 
-button {
+button,
+a,
+input,
+select,
+textarea {
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 @layer components {
@@ -45,7 +50,7 @@ button {
   }
 
   .field {
-    @apply h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-ink outline-none transition focus:border-palm focus:ring-4 focus:ring-palm/10;
+    @apply h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-base sm:text-sm text-ink outline-none transition focus:border-palm focus:ring-4 focus:ring-palm/10;
   }
 
   .label {

@@ -25,6 +25,8 @@ const navItems = [
   { id: "more", label: "More", icon: Menu },
 ];
 
+const mobileNavItems = navItems.filter((item) => item.id !== "reports");
+
 export function AppShell({
   children,
   activeScreen,
@@ -106,13 +108,19 @@ export function AppShell({
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate text-xs font-medium text-slate-500">{business.location}</p>
                     <span
-                      className={
-                        "inline-flex items-center rounded-full px-2 py-1 text-[0.45rem] font-semibold uppercase tracking-[0.08em] " +
-                        (isOnline
-                          ? "bg-emerald-100 text-emerald-900"
-                          : "bg-amber-100 text-amber-900")
-                      }
+                      className={classNames(
+                        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold shadow-xs",
+                        isOnline
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80"
+                          : "bg-amber-50 text-amber-800 border border-amber-200/80"
+                      )}
                     >
+                      <span
+                        className={classNames(
+                          "h-1.5 w-1.5 rounded-full",
+                          isOnline ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                        )}
+                      />
                       {isOnline ? "Online" : "Offline"}
                     </span>
                   </div>
@@ -122,13 +130,19 @@ export function AppShell({
                 {(canInstall || isIOS) && !isInstalled ? (
                   <button
                     onClick={onInstallPwa}
-                    className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-palm/30 bg-skyglass px-3 py-2 text-xs font-bold text-palm transition hover:bg-palm hover:text-white"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-palm/30 bg-skyglass px-2.5 py-1.5 text-xs font-bold text-palm transition hover:bg-palm hover:text-white"
+                    title="Install BizTrac App"
                   >
                     <Smartphone className="h-4 w-4" />
-                    <span>Install App</span>
+                    <span className="hidden sm:inline">Install App</span>
                   </button>
                 ) : null}
-                <button className="icon-button" aria-label="Search">
+                <button
+                  className="icon-button"
+                  aria-label="Search inventory"
+                  title="Search inventory"
+                  onClick={() => onNavigate("inventory")}
+                >
                   <Search className="h-5 w-5" />
                 </button>
                 <button
@@ -209,21 +223,28 @@ export function AppShell({
         </main>
       </div>
 
-      <button
-        className="fixed bottom-[calc(5.15rem+env(safe-area-inset-bottom))] right-4 z-40 grid h-14 w-14 place-items-center rounded-2xl bg-palm text-white shadow-2xl shadow-palm/35 transition hover:bg-palmDeep sm:hidden"
-        aria-label="New sale"
-        onClick={() => onNavigate("sales")}
-      >
-        <ReceiptText className="h-6 w-6" />
-      </button>
+      {activeScreen !== "sales" ? (
+        <button
+          className="fixed bottom-[calc(5.15rem+env(safe-area-inset-bottom))] right-4 z-40 flex h-14 w-14 items-center justify-center rounded-2xl bg-palm text-white shadow-2xl shadow-palm/40 transition-all hover:scale-105 active:scale-95 hover:bg-palmDeep sm:hidden"
+          aria-label="New sale"
+          title="Start new sale"
+          onClick={() => onNavigate("sales")}
+        >
+          <ReceiptText className="h-6 w-6" />
+        </button>
+      ) : null}
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] pt-2 backdrop-blur lg:hidden">
-        <div className="mx-auto grid max-w-md grid-cols-6 gap-1">
-          {navItems.map((item) => (
+        <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
+          {mobileNavItems.map((item) => (
             <MobileNavButton
               key={item.id}
               item={item}
-              active={activeScreen === item.id}
+              active={
+                item.id === "more"
+                  ? activeScreen === "more" || activeScreen === "reports" || activeScreen === "expenses"
+                  : activeScreen === item.id
+              }
               lowStockCount={item.id === "inventory" ? lowStockCount : 0}
               onClick={() => onNavigate(item.id)}
             />
@@ -268,15 +289,18 @@ function MobileNavButton({ item, active, onClick, lowStockCount }) {
   return (
     <button
       className={classNames(
-        "relative flex min-h-[4.15rem] flex-col items-center justify-center gap-1 rounded-2xl text-[0.7rem] font-bold transition",
-        active ? "bg-skyglass text-palm" : "text-slate-500"
+        "relative flex min-h-[4.15rem] flex-col items-center justify-center gap-1 rounded-2xl text-[0.7rem] font-bold transition-all active:scale-95",
+        active ? "bg-palm/10 text-palm font-black" : "text-slate-500 hover:text-slate-800"
       )}
       onClick={onClick}
     >
-      <Icon className="h-5 w-5" />
+      {active && (
+        <span className="absolute top-1.5 h-1 w-5 rounded-full bg-palm animate-in fade-in" />
+      )}
+      <Icon className={classNames("h-5 w-5 transition-transform", active ? "scale-110" : "")} />
       <span>{item.label}</span>
       {lowStockCount > 0 ? (
-        <span className="absolute right-3 top-2 grid h-5 min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[0.63rem] font-black text-white">
+        <span className="absolute right-3 top-2 grid h-5 min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[0.63rem] font-black text-white shadow-sm">
           {lowStockCount}
         </span>
       ) : null}

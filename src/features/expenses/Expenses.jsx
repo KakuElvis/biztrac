@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { showToast } from "../../lib/toast.js";
-import { AlertCircle, CalendarDays, CreditCard, Loader2, Plus, WalletCards } from "lucide-react";
+import { AlertCircle, CalendarDays, ChevronLeft, CreditCard, Loader2, Plus, WalletCards } from "lucide-react";
 import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
 import { expenseCategories } from "../../lib/expenseCategories.js";
@@ -47,6 +47,7 @@ export function Expenses({
   expensesError,
   expensesLoading,
   onCreateExpense,
+  onNavigate,
 }) {
   const [form, setForm] = useState(initialForm);
   const [actionError, setActionError] = useState("");
@@ -95,6 +96,19 @@ export function Expenses({
 
   return (
     <div className="space-y-6">
+      {onNavigate ? (
+        <div className="lg:hidden">
+          <button
+            type="button"
+            onClick={() => onNavigate("more")}
+            className="inline-flex items-center gap-1.5 text-xs font-black text-slate-500 hover:text-palm transition"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            <span>Back to Workspace</span>
+          </button>
+        </div>
+      ) : null}
+
       <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm font-bold text-palm">Expenses</p>

@@ -76,6 +76,11 @@ export function useAuthSession() {
         email: session?.user?.email || "",
         location: "",
         currency: "GHS",
+        slogan: "",
+        momo_details: "",
+        return_policy: "Goods sold in good condition are not returnable after 3 days.",
+        receipt_width: "58mm",
+        receipt_footer: "Thank you for your patronage! Visit again.",
       };
     }
 
@@ -107,6 +112,7 @@ export function useAuthSession() {
   return {
     session,
     workspace,
+    setWorkspace,
     workspaceLoading,
     isLoading,
     isRecoveringPassword,

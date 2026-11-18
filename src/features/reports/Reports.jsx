@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import * as Recharts from "recharts";
+import { useBackButtonModal } from "../../hooks/useBackButtonModal.js";
 import {
   AlertCircle,
   AlertTriangle,
@@ -8,6 +9,7 @@ import {
   Calendar,
   ChartNoAxesCombined,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   Clock,
   Crown,
@@ -302,11 +304,19 @@ export function Reports({
   onFetchProductStockTimeline,
   reportsError,
   reportsLoading,
+  onNavigate,
 }) {
   const [activeReportTab, setActiveReportTab] = useState("overview"); // "overview" | "stock"
   const [stockSearch, setStockSearch] = useState("");
   const [stockCategoryFilter, setStockCategoryFilter] = useState("all");
   const [selectedTimelineProduct, setSelectedTimelineProduct] = useState(null);
+
+  // Hook product stock lifecycle timeline drawer into Android Back Button
+  useBackButtonModal(
+    Boolean(selectedTimelineProduct),
+    () => setSelectedTimelineProduct(null),
+    "report-stock-timeline"
+  );
 
   const summary = reportSummary || emptyReportSummary;
   const series = summary.series?.length ? summary.series : emptyReportSummary.series;
@@ -370,6 +380,19 @@ export function Reports({
 
   return (
     <div className="space-y-6">
+      {onNavigate ? (
+        <div className="lg:hidden">
+          <button
+            type="button"
+            onClick={() => onNavigate("more")}
+            className="inline-flex items-center gap-1.5 text-xs font-black text-slate-500 hover:text-palm transition"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            <span>Back to Workspace</span>
+          </button>
+        </div>
+      ) : null}
+
       {/* Top Report View Tab Switcher */}
       <div className="flex rounded-2xl border border-slate-200 bg-slate-100/80 p-1 self-start max-w-md">
         <button

@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabase.js";
+import { toBusiness } from "./businessService.js";
 
 function requireSupabase() {
   if (!isSupabaseConfigured || !supabase) {
@@ -81,7 +82,7 @@ export async function signOut() {
 export async function getWorkspace(userId) {
   const { data, error } = await requireSupabase()
     .from("business_members")
-    .select("role, businesses(id, name, phone, email, location, logo_url, currency)")
+    .select("role, businesses(*)")
     .eq("user_id", userId)
     .limit(1)
     .maybeSingle();
@@ -91,6 +92,6 @@ export async function getWorkspace(userId) {
 
   return {
     role: data.role,
-    business: data.businesses,
+    business: toBusiness(data.businesses),
   };
 }

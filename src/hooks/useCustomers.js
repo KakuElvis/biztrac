@@ -66,10 +66,12 @@ export function useCustomers(repository, businessId, refreshAnalytics) {
 
   const handleForgiveDebt = async (customerId, options) => {
     const res = await repository.forgiveCustomerDebt(businessId, customerId, options);
+    const forgivenAmount = Number(res) || 0;
     setCustomers((current) =>
       current.map((c) => {
         if (String(c.id) === String(customerId)) {
-          return { ...c, debt: 0 };
+          const nextDebt = options?.saleId ? Math.max(0, (c.debt || 0) - forgivenAmount) : 0;
+          return { ...c, debt: nextDebt };
         }
         return c;
       })

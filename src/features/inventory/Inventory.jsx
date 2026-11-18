@@ -1,5 +1,6 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useBackButtonModal } from "../../hooks/useBackButtonModal.js";
 import {
   AlertCircle,
   AlertTriangle,
@@ -7,6 +8,7 @@ import {
   Camera,
   ChevronLeft,
   ChevronRight,
+  CreditCard,
   Edit3,
   Loader2,
   Minus,
@@ -60,6 +62,14 @@ export function Inventory({
   const [search, setSearch] = useState("");
   const [pendingProductId, setPendingProductId] = useState(null);
   const [isQuickRestockPickerOpen, setIsQuickRestockPickerOpen] = useState(false);
+
+  // Hook all inventory modals and pickers into Android & Browser Back Button
+  useBackButtonModal(Boolean(editingProduct), () => setEditingProduct(null), "inventory-edit");
+  useBackButtonModal(Boolean(restockingProduct), () => setRestockingProduct(null), "inventory-restock");
+  useBackButtonModal(Boolean(historyProduct), () => setHistoryProduct(null), "inventory-history");
+  useBackButtonModal(isCreatingProduct, () => setIsCreatingProduct(false), "inventory-create");
+  useBackButtonModal(isCategoryModalOpen, () => setIsCategoryModalOpen(false), "inventory-category");
+  useBackButtonModal(isQuickRestockPickerOpen, () => setIsQuickRestockPickerOpen(false), "inventory-quick-restock");
 
   const filteredProducts = useMemo(() => {
     let result = products;
@@ -199,22 +209,34 @@ export function Inventory({
       ) : null}
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total catalog" value={stockStats.totalProducts} note="Active SKUs" />
+        <StatCard
+          label="Total catalog"
+          value={stockStats.totalProducts}
+          note="Active SKUs in store"
+          icon={Boxes}
+          tone="blue"
+        />
         <StatCard
           label="Low stock items"
           value={stockStats.lowStockCount}
           note="At or below limit"
           highlight={stockStats.lowStockCount > 0}
+          icon={AlertTriangle}
+          tone="amber"
         />
         <StatCard
           label="Cost stock value"
           value={formatCurrency(stockStats.totalValue)}
-          note="Purchase cost total"
+          note="Purchase cost investment"
+          icon={CreditCard}
+          tone="teal"
         />
         <StatCard
           label="Retail stock value"
           value={formatCurrency(stockStats.totalRetailValue)}
-          note="Potential revenue"
+          note="Projected revenue"
+          icon={TrendingUp}
+          tone="emerald"
         />
       </section>
 
@@ -392,20 +414,61 @@ export function Inventory({
   );
 }
 
-function StatCard({ label, value, note, highlight }) {
+function StatCard({ label, value, note, icon: Icon, tone = "slate", highlight }) {
+  const toneStyles = {
+    slate: {
+      border: "border-slate-200/90",
+      bg: "bg-gradient-to-br from-white to-slate-50/80",
+      iconBg: "bg-slate-100 text-slate-700",
+      text: "text-ink",
+    },
+    blue: {
+      border: "border-blue-200/80",
+      bg: "bg-gradient-to-br from-white to-blue-50/40",
+      iconBg: "bg-blue-100 text-blue-700",
+      text: "text-ink",
+    },
+    amber: {
+      border: highlight ? "border-amber-300 ring-2 ring-amber-400/20" : "border-amber-200/80",
+      bg: highlight ? "bg-gradient-to-br from-amber-50/90 to-amber-100/50" : "bg-gradient-to-br from-white to-amber-50/30",
+      iconBg: "bg-amber-100 text-amber-800",
+      text: highlight ? "text-amber-900" : "text-ink",
+    },
+    teal: {
+      border: "border-teal-200/80",
+      bg: "bg-gradient-to-br from-white to-teal-50/40",
+      iconBg: "bg-teal-100 text-teal-800",
+      text: "text-ink",
+    },
+    emerald: {
+      border: "border-emerald-200/80",
+      bg: "bg-gradient-to-br from-white to-emerald-50/40",
+      iconBg: "bg-emerald-100 text-emerald-800",
+      text: "text-ink",
+    },
+  }[tone] || {
+    border: "border-slate-200",
+    bg: "bg-white",
+    iconBg: "bg-slate-100 text-slate-700",
+    text: "text-ink",
+  };
+
   return (
     <div
-      className={`rounded-3xl border p-4 shadow-sm transition ${
-        highlight
-          ? "border-amber-200 bg-amber-50/60"
-          : "border-slate-200 bg-white"
-      }`}
+      className={`rounded-3xl border p-4 shadow-sm transition hover:shadow-md ${toneStyles.border} ${toneStyles.bg}`}
     >
-      <p className="text-xs font-bold text-slate-500">{label}</p>
-      <p className={`mt-1 text-xl font-black ${highlight ? "text-amber-800" : "text-ink"}`}>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{label}</p>
+        {Icon ? (
+          <span className={`grid h-8 w-8 place-items-center rounded-xl ${toneStyles.iconBg}`}>
+            <Icon className="h-4 w-4" />
+          </span>
+        ) : null}
+      </div>
+      <p className={`mt-2 text-2xl font-black ${toneStyles.text}`}>
         {value}
       </p>
-      <p className="mt-1 text-[11px] font-semibold text-slate-400">{note}</p>
+      <p className="mt-1 text-xs font-semibold text-slate-400">{note}</p>
     </div>
   );
 }
@@ -1065,7 +1128,7 @@ function ProductForm({
               className="field mt-1"
               value={form.name}
               onChange={(e) => setField("name", e.target.value)}
-              placeholder="e.g. Kente Cloth Fabric"
+              placeholder="e.g. Product or Item Name"
               required
             />
           </FormField>

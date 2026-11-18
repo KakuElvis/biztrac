@@ -2,6 +2,8 @@ import {
   AlertCircle,
   AlertTriangle,
   Boxes,
+  ChevronRight,
+  Clock,
   CreditCard,
   Loader2,
   ReceiptText,
@@ -91,7 +93,7 @@ export function Dashboard({
         </div>
       ) : null}
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <section className="grid gap-4 sm:gap-5 sm:grid-cols-2 xl:grid-cols-3">
         <MetricCard
           label="Today's sales"
           value={formatCurrency(summary.todaySales)}
@@ -101,7 +103,9 @@ export function Dashboard({
               : `${countNote(summary.todayItemCount, "item")} sold`
           }
           icon={ReceiptText}
-          tone="green"
+          tone="emerald"
+          trend="up"
+          onClick={() => onNavigate("sales")}
         />
         <MetricCard
           label="Stock value"
@@ -109,13 +113,17 @@ export function Dashboard({
           note={productsLoading ? "Loading stock" : `${products.length} products tracked`}
           icon={Boxes}
           tone="blue"
+          trend="neutral"
+          onClick={() => onNavigate("inventory")}
         />
         <MetricCard
           label="Estimated profit"
           value={formatCurrency(summary.estimatedProfit)}
           note={dashboardLoading ? "Loading profit" : "After recorded expenses"}
           icon={TrendingUp}
-          tone="green"
+          tone="teal"
+          trend={summary.estimatedProfit < 0 ? "down" : "up"}
+          onClick={() => onNavigate("reports")}
         />
         <MetricCard
           label="Expenses"
@@ -126,8 +134,9 @@ export function Dashboard({
               : `${countNote(summary.expenseCount, "entry", "entries")} today`
           }
           icon={WalletCards}
-          tone="amber"
+          tone="rose"
           trend="down"
+          onClick={() => onNavigate("expenses")}
         />
         <MetricCard
           label="Debtors"
@@ -138,16 +147,24 @@ export function Dashboard({
               : `${countNote(summary.debtorCount, "customer")} owing`
           }
           icon={CreditCard}
-          tone="red"
-          trend="down"
+          tone="purple"
+          trend={summary.totalDebtors > 0 ? "alert" : "neutral"}
+          onClick={() => onNavigate("customers")}
         />
         <MetricCard
           label="Low stock"
           value={lowStockItems.length}
-          note={productsLoading ? "Loading stock" : "Restock soon"}
+          note={
+            productsLoading
+              ? "Loading stock"
+              : lowStockItems.length === 0
+                ? "All items well stocked"
+                : `${countNote(lowStockItems.length, "item")} need restock`
+          }
           icon={AlertTriangle}
           tone="amber"
-          trend="down"
+          trend={lowStockItems.length > 0 ? "alert" : "neutral"}
+          onClick={() => onNavigate("inventory")}
         />
       </section>
 
@@ -162,20 +179,50 @@ export function Dashboard({
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {[
-              { label: "Create invoice", icon: ReceiptText, screen: "more" },
-              { label: "Record expense", icon: WalletCards, screen: "expenses" },
-              { label: "Stock in", icon: Boxes, screen: "inventory" },
-              { label: "Customers", icon: UsersRound, screen: "customers" },
+              {
+                label: "Create invoice",
+                desc: "Generate bills & quotes",
+                icon: ReceiptText,
+                screen: "more",
+                color: "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white border-indigo-100",
+              },
+              {
+                label: "Record expense",
+                desc: "Log daily shop spending",
+                icon: WalletCards,
+                screen: "expenses",
+                color: "bg-rose-50 text-rose-600 group-hover:bg-rose-600 group-hover:text-white border-rose-100",
+              },
+              {
+                label: "Stock in",
+                desc: "Add or restock items",
+                icon: Boxes,
+                screen: "inventory",
+                color: "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white border-emerald-100",
+              },
+              {
+                label: "Customers",
+                desc: "Directory & debt collection",
+                icon: UsersRound,
+                screen: "customers",
+                color: "bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white border-purple-100",
+              },
             ].map((action) => (
               <button
                 key={action.label}
-                className="flex min-h-20 items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-palm/40 hover:bg-skyglass"
+                className="group flex min-h-20 items-center justify-between gap-4 rounded-2xl border border-slate-200/90 bg-white p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md active:scale-[0.98]"
                 onClick={() => onNavigate(action.screen)}
               >
-                <span className="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-palm">
-                  <action.icon className="h-5 w-5" />
-                </span>
-                <span className="font-black text-ink">{action.label}</span>
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl border transition-colors duration-200 ${action.color}`}>
+                    <action.icon className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-black text-ink text-sm sm:text-base group-hover:text-palm transition-colors">{action.label}</p>
+                    <p className="text-xs font-medium text-slate-400 truncate">{action.desc}</p>
+                  </div>
+                </div>
+                <ChevronRight className="h-5 w-5 shrink-0 text-slate-300 transition-transform duration-200 group-hover:translate-x-1 group-hover:text-slate-600" />
               </button>
             ))}
           </div>
@@ -187,7 +234,7 @@ export function Dashboard({
               <p className="label">Low stock alert</p>
               <h2 className="mt-1 text-lg font-black text-ink">Needs attention</h2>
             </div>
-            <button className="text-sm font-bold text-palm" onClick={() => onNavigate("inventory")}>
+            <button className="text-sm font-bold text-palm hover:text-palmDeep transition" onClick={() => onNavigate("inventory")}>
               View stock
             </button>
           </div>
@@ -200,10 +247,10 @@ export function Dashboard({
               lowStockItems.map((product) => (
                 <div
                   key={product.id}
-                  className="flex items-center justify-between gap-3 rounded-2xl bg-warning/10 p-3"
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200/80 bg-amber-50/50 p-3 transition hover:bg-amber-50"
                 >
-                  <div>
-                    <p className="text-sm font-black text-ink">{product.name}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-ink">{product.name}</p>
                     <p className="text-xs font-medium text-slate-500">
                       {[product.size, product.colour].filter(Boolean).join(" | ") || "Stock item"}
                     </p>
@@ -231,14 +278,28 @@ export function Dashboard({
             ) : null}
             {!dashboardLoading &&
               summary.recentSales.map((sale) => (
-                <div key={sale.id} className="flex items-center justify-between gap-4 py-3">
-                  <div>
-                    <p className="text-sm font-black text-ink">{sale.customer}</p>
-                    <p className="text-xs font-medium text-slate-500">
-                      {sale.id} | {sale.time} | {sale.payment}
-                    </p>
+                <div key={sale.id} className="flex items-center justify-between gap-4 py-3 group">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600 group-hover:bg-palm/10 group-hover:text-palm transition">
+                      <ReceiptText className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-ink">{sale.customer}</p>
+                      <div className="flex items-center gap-2 text-xs font-medium text-slate-500 flex-wrap">
+                        <span className="font-mono text-slate-400">{sale.id}</span>
+                        <span>•</span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3 text-slate-400" />
+                          {sale.time}
+                        </span>
+                        <span>•</span>
+                        <span className="inline-block rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-600">
+                          {sale.payment}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-sm font-black text-ink">{formatCurrency(sale.amount)}</p>
+                  <p className="text-sm font-black text-ink shrink-0">{formatCurrency(sale.amount)}</p>
                 </div>
               ))}
           </div>
@@ -250,7 +311,7 @@ export function Dashboard({
               <p className="label">Debtors</p>
               <h2 className="mt-1 text-lg font-black text-ink">Follow up</h2>
             </div>
-            <button className="text-sm font-bold text-palm" onClick={() => onNavigate("customers")}>
+            <button className="text-sm font-bold text-palm hover:text-palmDeep transition" onClick={() => onNavigate("customers")}>
               View & Pay
             </button>
           </div>
@@ -261,14 +322,26 @@ export function Dashboard({
             ) : null}
             {!dashboardLoading &&
               summary.debtors.map((debtor) => (
-                <div key={debtor.id} className="flex items-center justify-between gap-4 py-3">
-                  <div>
-                    <p className="text-sm font-black text-ink">{debtor.name}</p>
-                    <p className="text-xs font-medium text-slate-500">{debtor.due}</p>
+                <div key={debtor.id} className="flex items-center justify-between gap-4 py-3 group">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-ink">{debtor.name}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="rounded-full bg-red-50 border border-red-200/60 px-2 py-0.5 text-[10px] font-bold text-red-600">
+                        {debtor.due || "Due"}
+                      </span>
+                    </div>
                   </div>
-                  <p className="text-sm font-black text-red-600">
-                    {formatCurrency(debtor.amount)}
-                  </p>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <p className="text-sm font-black text-red-600">
+                      {formatCurrency(debtor.amount)}
+                    </p>
+                    <button
+                      onClick={() => onNavigate("customers")}
+                      className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-100 transition shadow-xs"
+                    >
+                      Collect
+                    </button>
+                  </div>
                 </div>
               ))}
           </div>

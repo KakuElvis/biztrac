@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, Suspense, lazy } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense, lazy } from "react";
 import { AppLogo } from "./components/common/AppLogo.jsx";
 import { AppShell } from "./components/layout/AppShell.jsx";
 import { AuthScreen, PasswordRecoveryScreen } from "./features/auth/AuthScreen.jsx";
@@ -10,6 +10,9 @@ import { useExpenses } from "./hooks/useExpenses.js";
 import { useAnalytics } from "./hooks/useAnalytics.js";
 import { useOfflineSync } from "./hooks/useOfflineSync.js";
 import { usePWA } from "./hooks/usePWA.js";
+import { handleBackPop, clearBackStack } from "./services/navigation/backStackService.js";
+import { useBackButtonModal } from "./hooks/useBackButtonModal.js";
+import { showToast } from "./lib/toast.js";
 
 const Dashboard = lazy(() => import("./features/dashboard/Dashboard.jsx").then((m) => ({ default: m.Dashboard || m.default })));
 const Inventory = lazy(() => import("./features/inventory/Inventory.jsx").then((m) => ({ default: m.Inventory || m.default })));
@@ -50,6 +53,7 @@ export default function App() {
   const {
     session,
     workspace,
+    setWorkspace,
     workspaceLoading,
     isLoading,
     isRecoveringPassword,
@@ -60,6 +64,14 @@ export default function App() {
 
   const [activeScreen, setActiveScreen] = useState(getScreenFromUrl);
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const lastBackPressRef = useRef(0);
+
+  // Hook password recovery screen into the back stack
+  useBackButtonModal(
+    isRecoveringPassword,
+    () => setIsRecoveringPassword(false),
+    "password-recovery"
+  );
 
   const businessId = workspace?.business?.id;
   const repository = getRepository();
@@ -91,9 +103,36 @@ export default function App() {
     window.history.replaceState({ screen: current }, "", url.toString());
 
     const handlePopState = (event) => {
+      // 1. Check if an active modal or drawer was open and consume the back press
+      const modalHandled = handleBackPop();
+      if (modalHandled) {
+        return; // Overlay was dismissed, stay on current screen
+      }
+
+      // 2. Read target screen from history state or URL parameter
       const screenFromState = event.state?.screen;
       const screenFromUrl = new URLSearchParams(window.location.search).get("screen");
       const target = screenFromState || screenFromUrl || "dashboard";
+
+      // 3. Android back press double-tap protection on root Dashboard
+      const isMobileDevice =
+        /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+        window.matchMedia("(display-mode: standalone)").matches;
+
+      if (activeScreen === "dashboard" && target === "dashboard" && isMobileDevice) {
+        const now = Date.now();
+        if (now - lastBackPressRef.current < 2000) {
+          // Double press confirmed: allow native browser/PWA exit
+          return;
+        }
+
+        // First press: retain trap and show toast warning
+        lastBackPressRef.current = now;
+        window.history.pushState({ screen: "dashboard" }, "", url.toString());
+        showToast("Press back again to exit BizTrac", { type: "info", duration: 2000 });
+        return;
+      }
+
       if (screens[target]) {
         setActiveScreen(target);
       } else {
@@ -103,7 +142,7 @@ export default function App() {
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+  }, [activeScreen]);
 
   const {
     products,
@@ -157,6 +196,7 @@ export default function App() {
     handleUpdateCustomer,
     fetchCustomerDetails,
     handlePayDebt,
+    handleForgiveDebt,
     resetCustomers,
   } = useCustomers(repository, businessId, refreshAnalytics);
 
@@ -184,6 +224,7 @@ export default function App() {
   }, []);
 
   function handleResetAll() {
+    clearBackStack();
     resetInventory();
     resetCustomers();
     resetExpenses();
@@ -195,7 +236,11 @@ export default function App() {
 
   const handleUpdateBusinessProfile = async (nextBusiness) => {
     if (!workspace?.business?.id) return;
-    await repository.updateBusiness(workspace.business.id, nextBusiness);
+    const updated = await repository.updateBusiness(workspace.business.id, nextBusiness);
+    if (updated) {
+      setWorkspace((prev) => (prev ? { ...prev, business: updated } : prev));
+    }
+    return updated;
   };
 
   const handleCompleteSale = async ({ customer, lines, paymentType, amountPaid, dueDate }) => {
@@ -302,12 +347,14 @@ export default function App() {
           business={business}
           canDeleteProducts={["owner", "admin"].includes(workspace?.role)}
           canManageCategories={["owner", "admin"].includes(workspace?.role)}
+          canForgiveDebt={["owner", "admin"].includes(workspace?.role)}
           categories={categories}
           categoriesError={categoriesError}
           categoriesLoading={categoriesLoading}
           customers={customers}
           customersError={customersError}
           customersLoading={customersLoading}
+          onForgiveDebt={handleForgiveDebt}
           dashboardError={dashboardError}
           dashboardLoading={dashboardLoading}
           dashboardSummary={dashboardSummary}

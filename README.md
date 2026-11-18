@@ -42,7 +42,7 @@ npm run check
 - Mobile-first app shell with bottom navigation
 - Register/login with business workspace provisioning
 - Dashboard overview with sales, stock, expenses, debtors, and estimated profit
-- Inventory CRUD with boutique fields and business-defined categories
+- Inventory CRUD with product variants, SKU tracking, and business-defined categories
 - Fast sale flow with customer selection/creation, credit sales, transactional stock decrementing, and printable/shareable receipts
 - Expense capture and history backed by Supabase
 - Reports for daily sales, profit, expenses, best sellers, low stock, and debtors

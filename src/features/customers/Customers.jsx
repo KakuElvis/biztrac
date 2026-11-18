@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import { useBackButtonModal } from "../../hooks/useBackButtonModal.js";
 import {
   UserPlus,
   Search,
@@ -17,9 +18,19 @@ import {
   Clock,
   Loader2,
   ArrowUpRight,
+  ShieldAlert,
 } from "lucide-react";
 import { showToast } from "../../lib/toast.js";
 import { formatCurrency } from "../../lib/formatters.js";
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
 
 function isValidEmail(value) {
   return /\S+@\S+\.\S+/.test(value || "");
@@ -31,12 +42,16 @@ function isValidPhone(value) {
   return normalized.length >= 7 && normalized.length <= 15;
 }
 
-function buildDebtWhatsAppText(receipt, businessName = "BizTrac") {
+function buildDebtWhatsAppText(receipt, business) {
+  const businessName = (business?.name || "BizTrac").toUpperCase();
   const dateStr = new Date(receipt.createdAt).toLocaleDateString("en-GB", {
     dateStyle: "medium",
   });
-  return [
-    `🧾 *DEBT REPAYMENT RECEIPT - ${businessName.toUpperCase()}*`,
+  const lines = [
+    `🧾 *DEBT REPAYMENT RECEIPT - ${businessName}*`,
+    business?.slogan ? `✨ _${business.slogan}_` : "",
+    business?.phone ? `📍 ${business.phone} | ${business?.location || ""}` : "",
+    business?.momo_details ? `📱 *${business.momo_details}*` : "",
     `--------------------------------`,
     `🔢 *Ref:* ${receipt.reference}`,
     `📅 *Date:* ${dateStr}`,
@@ -45,15 +60,24 @@ function buildDebtWhatsAppText(receipt, businessName = "BizTrac") {
     `--------------------------------`,
     `💵 *Amount Received:* ${formatCurrency(receipt.amountPaid)}`,
     `⚠️ *Remaining Debt Balance:* ${formatCurrency(receipt.remainingDebt)}`,
-    `--------------------------------`,
-    `🙏 *Thank you for your payment!*`,
-  ].join("\n");
+  ];
+
+  if (business?.return_policy) {
+    lines.push(`--------------------------------`);
+    lines.push(`ℹ️ _${business.return_policy}_`);
+  }
+
+  lines.push(`--------------------------------`);
+  lines.push(`🙏 *${business?.receipt_footer || "Thank you for your payment!"}*`);
+  return lines.filter((l) => l !== "").join("\n");
 }
 
-function buildCustomerWhatsAppStatement(customer, metrics, purchases = [], businessName = "BizTrac") {
+function buildCustomerWhatsAppStatement(customer, metrics, purchases = [], business) {
+  const businessName = (business?.name || "BizTrac").toUpperCase();
   const dateStr = new Date().toLocaleDateString("en-GB", { dateStyle: "medium" });
   const lines = [
-    `📊 *ACCOUNT STATEMENT - ${businessName.toUpperCase()}*`,
+    `📊 *ACCOUNT STATEMENT - ${businessName}*`,
+    business?.slogan ? `✨ _${business.slogan}_` : "",
     `--------------------------------`,
     `📅 *Date:* ${dateStr}`,
     `👤 *Customer:* ${customer.name}`,
@@ -73,46 +97,99 @@ function buildCustomerWhatsAppStatement(customer, metrics, purchases = [], busin
     });
   }
 
+  if (business?.return_policy) {
+    lines.push(`--------------------------------`);
+    lines.push(`ℹ️ _${business.return_policy}_`);
+  }
+
   lines.push(`--------------------------------`);
-  lines.push(`🙏 *Thank you for doing business with us!*`);
-  return lines.join("\n");
+  lines.push(`🙏 *${business?.receipt_footer || "Thank you for doing business with us!"}*`);
+  return lines.filter((l) => l !== "").join("\n");
 }
 
-function buildDebtReceiptHtml(receipt, businessName = "BizTrac") {
+function buildDebtReceiptHtml(receipt, business) {
+  const businessName = escapeHtml(business?.name || "BizTrac");
+  const businessDetails = escapeHtml([business?.phone, business?.location].filter(Boolean).join(" • "));
   const dateStr = new Date(receipt.createdAt).toLocaleDateString("en-GB", {
     dateStyle: "medium",
   });
+  const is80mm = business?.receipt_width === "80mm";
+  const paperWidthCss = is80mm ? "72mm" : "48mm";
+  const fontSizeCss = is80mm ? "12px" : "11px";
+
   return `
     <!doctype html>
     <html>
       <head>
-        <title>Repayment Receipt ${receipt.reference}</title>
+        <title>Receipt ${escapeHtml(receipt.reference)}</title>
         <style>
           * { box-sizing: border-box; }
-          body { margin: 0; background: #fff; color: #111827; font-family: Arial, sans-serif; font-size: 13px; }
-          .receipt { width: 320px; max-width: 100%; margin: 0 auto; padding: 18px; }
-          h1 { margin: 0; font-size: 18px; text-align: center; }
-          .muted { color: #64748b; font-size: 11px; text-align: center; }
-          .meta { border-bottom: 1px dashed #cbd5e1; border-top: 1px dashed #cbd5e1; margin: 14px 0; padding: 10px 0; }
-          .meta div, .row { display: flex; justify-content: space-between; gap: 12px; margin-top: 4px; }
-          .total { border-top: 1px dashed #cbd5e1; font-size: 15px; font-weight: 800; margin-top: 12px; padding-top: 12px; }
-          .thanks { margin-top: 18px; text-align: center; }
+          @page { size: auto; margin: 0; }
+          html, body {
+            margin: 0;
+            padding: 0;
+            background: #fff;
+            color: #000;
+            font-family: monospace, 'Courier New', Courier, sans-serif;
+            font-size: ${fontSizeCss};
+            line-height: 1.3;
+          }
+          .receipt {
+            width: ${paperWidthCss};
+            max-width: ${paperWidthCss};
+            margin: 0 auto;
+            padding: 2mm;
+          }
+          .text-center { text-align: center; }
+          h1 { margin: 0; font-size: ${is80mm ? "16px" : "14px"}; text-transform: uppercase; font-weight: bold; }
+          .slogan { font-size: 10px; font-style: italic; margin: 2px 0; }
+          .details { font-size: 10px; margin: 2px 0 6px; }
+          .momo { border: 1px dashed #000; padding: 3px; margin: 4px 0; font-weight: bold; font-size: 10px; }
+          .meta {
+            border-top: 1px dashed #000;
+            border-bottom: 1px dashed #000;
+            margin: 6px 0;
+            padding: 4px 0;
+          }
+          .row { display: flex; justify-content: space-between; gap: 8px; margin-top: 2px; }
+          .total {
+            border-top: 1px dashed #000;
+            font-size: ${is80mm ? "14px" : "12px"};
+            font-weight: 800;
+            margin-top: 6px;
+            padding-top: 6px;
+          }
+          .footer {
+            border-top: 1px dashed #000;
+            margin-top: 8px;
+            padding-top: 6px;
+            text-align: center;
+            font-size: 9px;
+          }
         </style>
       </head>
       <body>
         <main class="receipt">
-          <h1>${businessName}</h1>
-          <p class="muted">Debt Repayment Receipt</p>
+          <div class="text-center">
+            <h1>${businessName}</h1>
+            ${business?.slogan ? `<p class="slogan">${escapeHtml(business.slogan)}</p>` : ""}
+            <p class="details">${businessDetails || "Debt Repayment Receipt"}</p>
+            ${business?.momo_details ? `<div class="momo">MoMo: ${escapeHtml(business.momo_details)}</div>` : ""}
+          </div>
           <section class="meta">
-            <div><span>Receipt</span><strong>${receipt.reference}</strong></div>
-            <div><span>Date</span><strong>${dateStr}</strong></div>
-            <div><span>Customer</span><strong>${receipt.customerName}</strong></div>
-            <div><span>Method</span><strong>${String(receipt.paymentMethod).toUpperCase()}</strong></div>
+            <div class="row"><span>Receipt:</span><strong>${escapeHtml(receipt.reference)}</strong></div>
+            <div class="row"><span>Date:</span><strong>${escapeHtml(dateStr)}</strong></div>
+            <div class="row"><span>Customer:</span><strong>${escapeHtml(receipt.customerName)}</strong></div>
+            <div class="row"><span>Method:</span><strong>${escapeHtml(String(receipt.paymentMethod).toUpperCase())}</strong></div>
           </section>
-          <div class="row"><span>Previous Debt</span><span>${formatCurrency(receipt.previousDebt)}</span></div>
-          <div class="total" style="color: #027aec;"><span>Amount Paid</span><span>${formatCurrency(receipt.amountPaid)}</span></div>
-          <div class="row" style="color: #dc2626; font-weight: 800; margin-top: 8px;"><span>Remaining Debt Balance</span><span>${formatCurrency(receipt.remainingDebt)}</span></div>
-          <p class="thanks">Thank you for your payment.</p>
+          <div class="row"><span>Previous Debt:</span><span>${escapeHtml(formatCurrency(receipt.previousDebt))}</span></div>
+          <div class="row total"><span>Amount Paid:</span><span>${escapeHtml(formatCurrency(receipt.amountPaid))}</span></div>
+          <div class="row" style="font-weight: bold; margin-top: 4px;"><span>Remaining Debt:</span><span>${escapeHtml(formatCurrency(receipt.remainingDebt))}</span></div>
+          <div class="footer">
+            ${business?.return_policy ? `<p style="margin: 2px 0;">${escapeHtml(business.return_policy)}</p>` : ""}
+            <p style="margin: 4px 0; font-weight: bold;">${escapeHtml(business?.receipt_footer || "Thank you for your payment.")}</p>
+            <p style="margin: 2px 0; font-size: 8px; color: #555;">Powered by BizTrac</p>
+          </div>
         </main>
       </body>
     </html>
@@ -120,6 +197,7 @@ function buildDebtReceiptHtml(receipt, businessName = "BizTrac") {
 }
 
 export function Customers({
+  business,
   customers = [],
   customersLoading = false,
   customersError = "",
@@ -127,6 +205,8 @@ export function Customers({
   onUpdateCustomer,
   onFetchCustomerDetails,
   onPayDebt,
+  onForgiveDebt,
+  canForgiveDebt = true,
   onNavigate,
   initialFilterTab = "all",
 }) {
@@ -359,9 +439,80 @@ export function Customers({
     }
   }
 
+  const [forgiveTarget, setForgiveTarget] = useState(null);
+  const [forgiveStatus, setForgiveStatus] = useState("forgiven");
+  const [forgiveReason, setForgiveReason] = useState("");
+  const [forgiveError, setForgiveError] = useState("");
+  const [isForgiving, setIsForgiving] = useState(false);
+
+  // Hook all customer modals and drawers into Android & Browser Back Button
+  useBackButtonModal(showForm, () => setShowForm(false), "customer-create");
+  useBackButtonModal(Boolean(activePaymentCustomer), () => setActivePaymentCustomer(null), "customer-pay");
+  useBackButtonModal(Boolean(repaymentReceipt), () => setRepaymentReceipt(null), "customer-receipt");
+  useBackButtonModal(Boolean(selectedCustomerForView), () => setSelectedCustomerForView(null), "customer-details");
+  useBackButtonModal(Boolean(forgiveTarget), () => setForgiveTarget(null), "customer-forgive");
+
+  async function handleForgiveDebtSubmit(e) {
+    e.preventDefault();
+    if (!forgiveTarget || !onForgiveDebt) return;
+    setForgiveError("");
+    setIsForgiving(true);
+
+    try {
+      const res = await onForgiveDebt(forgiveTarget.customer.id, {
+        saleId: forgiveTarget.sale?.id || null,
+        reason: forgiveReason.trim() || `Debt marked as ${forgiveStatus} by store manager`,
+        status: forgiveStatus,
+      });
+
+      const clearedAmount = Number(res) || forgiveTarget.amount || 0;
+      showToast(
+        `Debt of ${formatCurrency(clearedAmount)} successfully marked as ${
+          forgiveStatus === "written_off" ? "written off" : forgiveStatus
+        }.`,
+        { type: "success" }
+      );
+
+      // Update local modal state if customer modal is open
+      if (selectedCustomerForView && String(selectedCustomerForView.id) === String(forgiveTarget.customer.id)) {
+        const nextDebt = Math.max(0, (selectedCustomerForView.debt || 0) - clearedAmount);
+        setSelectedCustomerForView((prev) => ({ ...prev, debt: nextDebt }));
+        setDetailsData((prev) => {
+          if (!prev) return prev;
+          const nextMetrics = {
+            ...prev.metrics,
+            activeDebt: Math.max(0, (prev.metrics?.activeDebt || 0) - clearedAmount),
+          };
+          const nextPurchases = prev.purchases?.map((p) => {
+            if (!forgiveTarget.sale || p.id === forgiveTarget.sale.id) {
+              return { ...p, amountPaid: p.total, debtStatus: forgiveStatus };
+            }
+            return p;
+          });
+          return {
+            ...prev,
+            customer: { ...prev.customer, debt: nextDebt },
+            metrics: nextMetrics,
+            purchases: nextPurchases,
+          };
+        });
+      }
+
+      setForgiveTarget(null);
+      setForgiveReason("");
+      setForgiveStatus("forgiven");
+    } catch (err) {
+      console.error("Unable to forgive debt", err);
+      setForgiveError(err?.message || "Unable to forgive customer debt.");
+      showToast(err?.message || "Failed to forgive debt", { type: "warn" });
+    } finally {
+      setIsForgiving(false);
+    }
+  }
+
   function handlePrintReceipt(receipt) {
-    const html = buildDebtReceiptHtml(receipt);
-    const win = window.open("", "_blank");
+    const html = buildDebtReceiptHtml(receipt, business);
+    const win = window.open("", "_blank", "width=380,height=600");
     if (!win) {
       showToast("Allow popups to print receipt", { type: "warn" });
       return;
@@ -375,7 +526,7 @@ export function Customers({
   }
 
   function handleSendWhatsApp(receipt) {
-    const text = buildDebtWhatsAppText(receipt);
+    const text = buildDebtWhatsAppText(receipt, business);
     const phoneDigits = receipt.customerPhone
       ? String(receipt.customerPhone).replace(/[^0-9]/g, "")
       : "";
@@ -386,7 +537,7 @@ export function Customers({
   }
 
   function handleSendCustomerStatement(customer, metrics, purchases) {
-    const text = buildCustomerWhatsAppStatement(customer, metrics, purchases);
+    const text = buildCustomerWhatsAppStatement(customer, metrics, purchases, business);
     const phoneDigits = customer.phone ? String(customer.phone).replace(/[^0-9]/g, "") : "";
     const url = phoneDigits
       ? `https://wa.me/${phoneDigits}?text=${encodeURIComponent(text)}`
@@ -395,31 +546,38 @@ export function Customers({
   }
 
   function handleCopyReceipt(receipt) {
-    const text = buildDebtWhatsAppText(receipt);
+    const text = buildDebtWhatsAppText(receipt, business);
     navigator.clipboard.writeText(text);
     showToast("Receipt copied to clipboard", { type: "success" });
   }
 
   return (
     <section className="space-y-4">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-4">
-          <div>
-            <p className="text-sm font-bold text-palm">Customers</p>
-            <h1 className="mt-1 text-2xl font-black text-ink">Directory & Profiles</h1>
-          </div>
-          <div className="relative">
-            <input
-              placeholder="Search customers"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="rounded-2xl border border-slate-200 bg-white px-8 py-2 text-sm text-slate-900 outline-none focus:border-palm"
-            />
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-          </div>
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-bold text-palm">Customers</p>
+          <h1 className="mt-1 text-2xl sm:text-3xl font-black text-ink">Directory & Profiles</h1>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 sm:w-64">
+            <input
+              placeholder="Search customers..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-white py-2 pl-9 pr-8 text-sm text-slate-900 outline-none focus:border-palm focus:ring-2 focus:ring-palm/10"
+            />
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
           <button
             className="flex items-center gap-2 rounded-2xl bg-palm px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:bg-palm/90"
             onClick={() => setShowForm((s) => !s)}
@@ -611,6 +769,126 @@ export function Customers({
                 type="button"
                 className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-100"
                 onClick={() => setActivePaymentCustomer(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Forgive or Write Off Debt Modal */}
+      {forgiveTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm overflow-y-auto">
+          <form
+            className="w-full max-w-md space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl my-8"
+            onSubmit={handleForgiveDebtSubmit}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="grid h-10 w-10 place-items-center rounded-2xl bg-amber-100 text-amber-800">
+                  <ShieldAlert className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-amber-700">Financial Relief</p>
+                  <h3 className="text-lg font-black text-ink">Forgive or Write Off Debt</h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="icon-button h-8 w-8"
+                onClick={() => {
+                  setForgiveTarget(null);
+                  setForgiveError("");
+                }}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-red-200/80 bg-red-50/60 p-3.5 space-y-1">
+              <div className="flex justify-between items-center text-xs font-bold">
+                <span className="text-slate-600">Customer:</span>
+                <span className="text-ink font-black">{forgiveTarget.customer.name}</span>
+              </div>
+              {forgiveTarget.sale ? (
+                <div className="flex justify-between items-center text-xs font-bold">
+                  <span className="text-slate-600">Sale Transaction:</span>
+                  <span className="font-mono text-slate-700">{forgiveTarget.sale.id || "Specific Sale"}</span>
+                </div>
+              ) : (
+                <div className="flex justify-between items-center text-xs font-bold">
+                  <span className="text-slate-600">Scope:</span>
+                  <span className="text-slate-700">All Active Unpaid Sales</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center text-xs font-bold border-t border-red-200/70 pt-2">
+                <span className="text-slate-700">Debt Amount:</span>
+                <span className="text-base font-black text-red-600">{formatCurrency(forgiveTarget.amount)}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700">Resolution Category</label>
+              <div className="grid grid-cols-3 gap-2 mt-1.5">
+                {[
+                  { id: "forgiven", label: "Forgive", hint: "Goodwill / Discount" },
+                  { id: "written_off", label: "Write Off", hint: "Bad Debt Loss" },
+                  { id: "cancelled", label: "Cancel", hint: "Disputed / Void" },
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    className={`p-2.5 rounded-2xl border text-left transition ${
+                      forgiveStatus === cat.id
+                        ? "border-amber-400 bg-amber-50 ring-2 ring-amber-400/20"
+                        : "border-slate-200 bg-slate-50 hover:bg-slate-100"
+                    }`}
+                    onClick={() => setForgiveStatus(cat.id)}
+                  >
+                    <p className="text-xs font-black text-ink">{cat.label}</p>
+                    <p className="text-[10px] font-medium text-slate-500 mt-0.5 leading-tight">{cat.hint}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700">Reason & Audit Note</label>
+              <textarea
+                rows={2}
+                className="field mt-1 h-20 resize-none py-2 text-xs"
+                placeholder="e.g. Owner approved seasonal loyalty discount / Customer unreachable"
+                value={forgiveReason}
+                onChange={(e) => setForgiveReason(e.target.value)}
+              />
+            </div>
+
+            {forgiveError && <p className="text-xs font-bold text-red-600">{forgiveError}</p>}
+
+            <div className="flex gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="submit"
+                disabled={isForgiving}
+                className="flex-1 rounded-2xl bg-amber-600 py-3 text-xs font-black text-white shadow-soft transition hover:bg-amber-700 disabled:opacity-50"
+              >
+                {isForgiving
+                  ? "Processing…"
+                  : `Confirm ${
+                      forgiveStatus === "written_off"
+                        ? "Write-Off"
+                        : forgiveStatus === "cancelled"
+                        ? "Cancellation"
+                        : "Forgiveness"
+                    }`}
+              </button>
+              <button
+                type="button"
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-600 hover:bg-slate-100"
+                onClick={() => {
+                  setForgiveTarget(null);
+                  setForgiveError("");
+                }}
               >
                 Cancel
               </button>
@@ -865,11 +1143,32 @@ export function Customers({
                             <div className="flex justify-between items-center text-[11px] text-slate-400">
                               <span>Paid: {formatCurrency(purchase.amountPaid)}</span>
                               {purchase.total > purchase.amountPaid ? (
-                                <span className="font-bold text-red-600">
-                                  Balance Due: {formatCurrency(purchase.total - purchase.amountPaid)}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-red-600">
+                                    Balance Due: {formatCurrency(purchase.total - purchase.amountPaid)}
+                                  </span>
+                                  {canForgiveDebt && onForgiveDebt && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setForgiveTarget({
+                                          customer: selectedCustomerForView,
+                                          sale: purchase,
+                                          amount: purchase.total - purchase.amountPaid,
+                                        })
+                                      }
+                                      className="rounded-lg bg-amber-50 border border-amber-200/80 px-2 py-0.5 text-[10px] font-bold text-amber-800 hover:bg-amber-100 transition shadow-xs"
+                                    >
+                                      Forgive / Write Off
+                                    </button>
+                                  )}
+                                </div>
                               ) : (
-                                <span className="font-bold text-emerald-600">Paid in Full</span>
+                                <span className="font-bold text-emerald-600">
+                                  {purchase.debtStatus && purchase.debtStatus !== "active"
+                                    ? `Debt ${purchase.debtStatus}`
+                                    : "Paid in Full"}
+                                </span>
                               )}
                             </div>
                           </div>
@@ -974,6 +1273,23 @@ export function Customers({
                 <span>Record Debt Payment</span>
               </button>
 
+              {canForgiveDebt && onForgiveDebt && (detailsData?.metrics?.activeDebt || selectedCustomerForView.debt || 0) > 0 && (
+                <button
+                  type="button"
+                  className="flex items-center justify-center gap-1.5 rounded-2xl border border-amber-300 bg-amber-50 py-2.5 px-3 text-xs font-bold text-amber-800 hover:bg-amber-100 transition shadow-xs"
+                  onClick={() => {
+                    setForgiveTarget({
+                      customer: selectedCustomerForView,
+                      sale: null,
+                      amount: detailsData?.metrics?.activeDebt || selectedCustomerForView.debt || 0,
+                    });
+                  }}
+                >
+                  <ShieldAlert className="h-3.5 w-3.5 text-amber-700" />
+                  <span>Forgive / Write Off</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 className="flex items-center justify-center gap-1.5 rounded-2xl border border-emerald-200 bg-emerald-50 py-2.5 px-3 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
@@ -1010,7 +1326,7 @@ export function Customers({
                   <span>{c.name}</span>
                   <Eye className="h-3.5 w-3.5 text-slate-400 opacity-0 group-hover:opacity-100" />
                 </p>
-                <div className="flex items-center gap-2 mt-0.5">
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   <p className="text-xs font-semibold text-slate-500">{c.phone || c.email || "No contact info"}</p>
                   {c.debt > 0 ? (
                     <span className="rounded-full bg-red-50 border border-red-200/60 px-2.5 py-0.5 text-[11px] font-black text-red-600">
@@ -1030,17 +1346,59 @@ export function Customers({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 shrink-0 flex-wrap" onClick={(e) => e.stopPropagation()}>
+              {c.phone && (
+                <a
+                  href={`tel:${c.phone}`}
+                  title={`Call ${c.name}`}
+                  className="icon-button h-8 w-8 text-slate-500 hover:text-palm hover:border-palm/30"
+                >
+                  <Phone className="h-3.5 w-3.5" />
+                </a>
+              )}
+
+              {c.debt > 0 && c.phone && (
+                <button
+                  type="button"
+                  title="Send debt reminder via WhatsApp"
+                  className="icon-button h-8 w-8 text-emerald-600 bg-emerald-50 border-emerald-200/80 hover:bg-emerald-100"
+                  onClick={() => {
+                    const phoneDigits = String(c.phone).replace(/[^0-9]/g, "");
+                    const msg = `Hello ${c.name}, this is a friendly reminder from BizTrac regarding your outstanding balance of ${formatCurrency(c.debt)}. Kindly make payment at your earliest convenience. Thank you!`;
+                    window.open(`https://wa.me/${phoneDigits}?text=${encodeURIComponent(msg)}`, "_blank");
+                  }}
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                </button>
+              )}
+
               <button
-                className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-sm"
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-xs transition"
                 onClick={() => setActivePaymentCustomer(c)}
               >
                 <span className="text-xs font-black text-palm">GH₵</span>
                 <span>Record payment</span>
               </button>
 
+              {canForgiveDebt && onForgiveDebt && c.debt > 0 && (
+                <button
+                  type="button"
+                  title="Forgive or write off customer debt"
+                  className="icon-button h-8 w-8 text-amber-700 bg-amber-50 border-amber-200/80 hover:bg-amber-100"
+                  onClick={() => {
+                    setForgiveTarget({
+                      customer: c,
+                      sale: null,
+                      amount: c.debt,
+                    });
+                  }}
+                >
+                  <ShieldAlert className="h-3.5 w-3.5" />
+                </button>
+              )}
+
               <button
-                className="rounded-xl bg-palm/10 px-3 py-1.5 text-xs font-black text-palm hover:bg-palm/20"
+                className="rounded-xl bg-palm/10 px-3 py-1.5 text-xs font-black text-palm hover:bg-palm/20 transition"
                 onClick={() => onNavigate && onNavigate("sales")}
               >
                 Sell
