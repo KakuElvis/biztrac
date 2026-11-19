@@ -20,9 +20,29 @@ export const supabaseRepository = {
     try {
       const result = await listProducts(businessId, options);
       if (Array.isArray(result)) {
-        cacheLocalProducts(result);
+        if (result.length > 0) {
+          cacheLocalProducts(result);
+          return result;
+        }
+        // If remote returned 0 items (e.g. initial offline sync or RLS catchup), check local cache
+        const cached = await getLocalProducts();
+        if (cached && cached.length > 0) {
+          if (options?.page && options?.pageSize) {
+            return { data: cached, totalCount: cached.length };
+          }
+          return cached;
+        }
+        return result;
       } else if (result?.data) {
-        cacheLocalProducts(result.data);
+        if (result.data.length > 0) {
+          cacheLocalProducts(result.data);
+          return result;
+        }
+        const cached = await getLocalProducts();
+        if (cached && cached.length > 0) {
+          return { data: cached, totalCount: cached.length };
+        }
+        return result;
       }
       return result;
     } catch (error) {
@@ -61,8 +81,13 @@ export const supabaseRepository = {
   async listCategories(businessId) {
     try {
       const categories = await listCategories(businessId);
-      cacheLocalCategories(categories);
-      return categories;
+      if (Array.isArray(categories) && categories.length > 0) {
+        cacheLocalCategories(categories);
+        return categories;
+      }
+      const cached = await getLocalCategories();
+      if (cached && cached.length > 0) return cached;
+      return categories || [];
     } catch (error) {
       console.warn("[supabaseRepository] Fetching categories failed, attempting local cache", error);
       const cached = await getLocalCategories();
@@ -78,8 +103,13 @@ export const supabaseRepository = {
   async listCustomers(businessId) {
     try {
       const customers = await listCustomers(businessId);
-      cacheLocalCustomers(customers);
-      return customers;
+      if (Array.isArray(customers) && customers.length > 0) {
+        cacheLocalCustomers(customers);
+        return customers;
+      }
+      const cached = await getLocalCustomers();
+      if (cached && cached.length > 0) return cached;
+      return customers || [];
     } catch (error) {
       console.warn("[supabaseRepository] Fetching customers failed, attempting local cache", error);
       const cached = await getLocalCustomers();

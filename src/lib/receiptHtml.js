@@ -19,6 +19,7 @@ export function formatReceiptDate(value) {
 export const sampleTestReceipt = {
   reference: "TEST-RECEIPT-001",
   createdAt: new Date().toISOString(),
+  cashierName: "Store Cashier",
   customerName: "Walk-in Customer",
   paymentType: "Cash",
   lines: [
@@ -163,6 +164,7 @@ export function buildReceiptHtml(receipt, business) {
           <section class="meta">
             <div><span>Receipt:</span><strong>${escapeHtml(receipt.reference || "Draft")}</strong></div>
             <div><span>Date:</span><strong>${escapeHtml(formatReceiptDate(receipt.createdAt || new Date().toISOString()))}</strong></div>
+            ${receipt.cashierName ? `<div><span>Cashier:</span><strong>${escapeHtml(receipt.cashierName)}</strong></div>` : ""}
             <div><span>Customer:</span><strong>${escapeHtml(receipt.customerName || "Walk-in")}</strong></div>
             <div><span>Payment:</span><strong>${escapeHtml(receipt.paymentType || "Cash")}</strong></div>
             ${receipt.paymentAccount ? `<div><span>Account / Ref:</span><strong>${escapeHtml(receipt.paymentAccount)}</strong></div>` : ""}

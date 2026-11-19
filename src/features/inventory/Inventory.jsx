@@ -29,10 +29,15 @@ import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
 import { formatCurrency } from "../../lib/formatters.js";
 import { showToast } from "../../lib/toast.js";
+import { MaskedValue } from "../staff/index.js";
 
 export function Inventory({
   canManageCategories,
   canDeleteProducts,
+  canViewCostPrice = true,
+  canRestock = true,
+  canCreateProduct = true,
+  canEditProduct = true,
   categories = [],
   onCreateProduct,
   onCreateCategory,
@@ -102,8 +107,11 @@ export function Inventory({
       0
     );
 
+    const totalUnits = products.reduce((s, p) => s + (p.quantity || 0), 0);
+
     return {
       totalProducts: totalCount ?? products.length,
+      totalUnits,
       lowStockCount: lowStock.length,
       totalValue,
       totalRetailValue,
@@ -179,13 +187,15 @@ export function Inventory({
           <h1 className="mt-1 text-3xl font-black tracking-normal text-ink">Products</h1>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            icon={PackagePlus}
-            variant="secondary"
-            onClick={() => setIsQuickRestockPickerOpen(true)}
-          >
-            Restock Stock
-          </Button>
+          {canRestock && (
+            <Button
+              icon={PackagePlus}
+              variant="secondary"
+              onClick={() => setIsQuickRestockPickerOpen(true)}
+            >
+              Restock Stock
+            </Button>
+          )}
           {canManageCategories && (
             <Button
               icon={Tags}
@@ -195,9 +205,11 @@ export function Inventory({
               Add Category
             </Button>
           )}
-          <Button icon={Plus} onClick={() => setIsCreatingProduct(true)}>
-            Add Product
-          </Button>
+          {canCreateProduct && (
+            <Button icon={Plus} onClick={() => setIsCreatingProduct(true)}>
+              Add Product
+            </Button>
+          )}
         </div>
       </section>
 
@@ -224,13 +236,23 @@ export function Inventory({
           icon={AlertTriangle}
           tone="amber"
         />
-        <StatCard
-          label="Cost stock value"
-          value={formatCurrency(stockStats.totalValue)}
-          note="Purchase cost investment"
-          icon={CreditCard}
-          tone="teal"
-        />
+        {canViewCostPrice ? (
+          <StatCard
+            label="Cost stock value"
+            value={formatCurrency(stockStats.totalValue)}
+            note="Purchase cost investment"
+            icon={CreditCard}
+            tone="teal"
+          />
+        ) : (
+          <StatCard
+            label="Units in stock"
+            value={stockStats.totalUnits}
+            note="Total items on shelves"
+            icon={Boxes}
+            tone="teal"
+          />
+        )}
         <StatCard
           label="Retail stock value"
           value={formatCurrency(stockStats.totalRetailValue)}
@@ -292,6 +314,9 @@ export function Inventory({
         <div className="space-y-4">
           <VirtualizedProductGrid
             canDeleteProducts={canDeleteProducts}
+            canViewCostPrice={canViewCostPrice}
+            canRestock={canRestock}
+            canEditProduct={canEditProduct}
             pendingProductId={pendingProductId}
             products={filteredProducts}
             adjustStock={adjustStock}
@@ -475,6 +500,9 @@ function StatCard({ label, value, note, icon: Icon, tone = "slate", highlight })
 
 function ProductCard({
   canDelete,
+  canEdit = true,
+  canViewCostPrice = true,
+  canRestock = true,
   isPending,
   onAdjust,
   onDelete,
@@ -499,14 +527,16 @@ function ProductCard({
             )}
           </div>
           <div className="flex items-center gap-1">
-            <button
-              className="icon-button h-8 w-8 text-slate-400 hover:text-palm"
-              onClick={() => onEdit(product)}
-              title="Edit product info"
-              aria-label={`Edit ${product.name}`}
-            >
-              <Edit3 className="h-4 w-4" />
-            </button>
+            {canEdit && (
+              <button
+                className="icon-button h-8 w-8 text-slate-400 hover:text-palm"
+                onClick={() => onEdit(product)}
+                title="Edit product info"
+                aria-label={`Edit ${product.name}`}
+              >
+                <Edit3 className="h-4 w-4" />
+              </button>
+            )}
             {canDelete && (
               <button
                 className="icon-button h-8 w-8 text-slate-400 hover:text-red-600"
@@ -526,7 +556,16 @@ function ProductCard({
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-          <Info label="Cost Price" value={formatCurrency(product.costPrice)} />
+          <Info
+            label="Cost Price"
+            value={
+              canViewCostPrice ? (
+                formatCurrency(product.costPrice)
+              ) : (
+                <MaskedValue isAllowed={false} placeholder="••••" />
+              )
+            }
+          />
           <Info label="Selling Price" value={formatCurrency(product.sellingPrice)} />
           <Info label="Supplier" value={product.supplier || "-"} />
           <Info label="Brand / Type" value={product.brand || product.itemType || "-"} />
@@ -535,14 +574,16 @@ function ProductCard({
 
       <div className="flex items-center justify-between gap-2 border-t border-slate-100 bg-slate-50 p-3">
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            className="flex items-center gap-1 rounded-xl bg-palm px-3 py-1.5 text-xs font-bold text-white shadow-soft transition hover:bg-palm/90"
-            onClick={() => onOpenRestock(product)}
-          >
-            <PackagePlus className="h-3.5 w-3.5" />
-            <span>Restock</span>
-          </button>
+          {canRestock && (
+            <button
+              type="button"
+              className="flex items-center gap-1 rounded-xl bg-palm px-3 py-1.5 text-xs font-bold text-white shadow-soft transition hover:bg-palm/90"
+              onClick={() => onOpenRestock(product)}
+            >
+              <PackagePlus className="h-3.5 w-3.5" />
+              <span>Restock</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -1281,6 +1322,9 @@ function FormField({ label, required, children }) {
 function VirtualizedProductGrid({
   products,
   canDeleteProducts,
+  canViewCostPrice = true,
+  canRestock = true,
+  canEditProduct = true,
   pendingProductId,
   adjustStock,
   removeProduct,
@@ -1324,6 +1368,9 @@ function VirtualizedProductGrid({
             >
               <ProductCard
                 canDelete={canDeleteProducts}
+                canEdit={canEditProduct}
+                canViewCostPrice={canViewCostPrice}
+                canRestock={canRestock}
                 isPending={pendingProductId === product.id}
                 onAdjust={adjustStock}
                 onDelete={removeProduct}

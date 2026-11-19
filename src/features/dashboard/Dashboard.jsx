@@ -16,7 +16,7 @@ import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
 import { MetricCard } from "../../components/cards/MetricCard.jsx";
 import { emptyDashboardSummary } from "../../services/dashboardService.js";
-import { formatCompactCurrency, formatCurrency } from "../../lib/formatters.js";
+import { classNames, formatCompactCurrency, formatCurrency } from "../../lib/formatters.js";
 
 function countNote(count, singular, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
@@ -53,6 +53,10 @@ function greetingForHour(hour) {
 
 export function Dashboard({
   business,
+  canViewProfit = true,
+  canViewCostPrice = true,
+  isCashier = false,
+  permissions,
   dashboardError,
   dashboardLoading,
   dashboardSummary = emptyDashboardSummary,
@@ -60,6 +64,7 @@ export function Dashboard({
   productsLoading,
   onNavigate,
 }) {
+  const effectiveIsCashier = Boolean(isCashier || permissions?.isCashier);
   const summary = dashboardSummary || emptyDashboardSummary;
   const ownerName = business?.owner || "there";
   const greeting = greetingForHour(new Date().getHours());
@@ -76,13 +81,15 @@ export function Dashboard({
           <p className="text-sm font-bold text-palm">{greeting}, {ownerName}</p>
           <h1 className="mt-1 text-3xl font-black tracking-normal text-ink">Today at a glance</h1>
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:flex">
+        <div className="flex flex-wrap items-center gap-2">
           <Button icon={ShoppingCart} onClick={() => onNavigate("sales")}>
             New Sale
           </Button>
-          <Button icon={Boxes} variant="secondary" onClick={() => onNavigate("inventory")}>
-            Add Stock
-          </Button>
+          {!effectiveIsCashier && (
+            <Button icon={Boxes} variant="secondary" onClick={() => onNavigate("inventory")}>
+              Add Stock
+            </Button>
+          )}
         </div>
       </section>
 
@@ -107,37 +114,59 @@ export function Dashboard({
           trend="up"
           onClick={() => onNavigate("sales")}
         />
-        <MetricCard
-          label="Stock value"
-          value={formatCompactCurrency(totalStockValue)}
-          note={productsLoading ? "Loading stock" : `${products.length} products tracked`}
-          icon={Boxes}
-          tone="blue"
-          trend="neutral"
-          onClick={() => onNavigate("inventory")}
-        />
-        <MetricCard
-          label="Estimated profit"
-          value={formatCurrency(summary.estimatedProfit)}
-          note={dashboardLoading ? "Loading profit" : "After recorded expenses"}
-          icon={TrendingUp}
-          tone="teal"
-          trend={summary.estimatedProfit < 0 ? "down" : "up"}
-          onClick={() => onNavigate("reports")}
-        />
-        <MetricCard
-          label="Expenses"
-          value={formatCurrency(summary.totalExpenses)}
-          note={
-            dashboardLoading
-              ? "Loading expenses"
-              : `${countNote(summary.expenseCount, "entry", "entries")} today`
-          }
-          icon={WalletCards}
-          tone="rose"
-          trend="down"
-          onClick={() => onNavigate("expenses")}
-        />
+        {!effectiveIsCashier && (
+          <MetricCard
+            label={canViewCostPrice ? "Stock value" : "Catalog products"}
+            value={canViewCostPrice ? formatCompactCurrency(totalStockValue) : products.length}
+            note={
+              productsLoading
+                ? "Loading stock"
+                : canViewCostPrice
+                ? `${products.length} products tracked`
+                : "Active inventory items"
+            }
+            icon={Boxes}
+            tone="blue"
+            trend="neutral"
+            onClick={() => onNavigate("inventory")}
+          />
+        )}
+        {canViewProfit ? (
+          <MetricCard
+            label="Estimated profit"
+            value={formatCurrency(summary.estimatedProfit)}
+            note={dashboardLoading ? "Loading profit" : "After recorded expenses"}
+            icon={TrendingUp}
+            tone="teal"
+            trend={summary.estimatedProfit < 0 ? "down" : "up"}
+            onClick={() => onNavigate("reports")}
+          />
+        ) : (
+          <MetricCard
+            label="Items sold today"
+            value={summary.todayItemCount || 0}
+            note={dashboardLoading ? "Loading counts" : "Total items checked out"}
+            icon={ReceiptText}
+            tone="teal"
+            trend="up"
+            onClick={() => onNavigate("sales")}
+          />
+        )}
+        {!effectiveIsCashier && (
+          <MetricCard
+            label="Expenses"
+            value={formatCurrency(summary.totalExpenses)}
+            note={
+              dashboardLoading
+                ? "Loading expenses"
+                : `${countNote(summary.expenseCount, "entry", "entries")} today`
+            }
+            icon={WalletCards}
+            tone="rose"
+            trend="down"
+            onClick={() => onNavigate("expenses")}
+          />
+        )}
         <MetricCard
           label="Debtors"
           value={formatCurrency(summary.totalDebtors)}
@@ -151,24 +180,26 @@ export function Dashboard({
           trend={summary.totalDebtors > 0 ? "alert" : "neutral"}
           onClick={() => onNavigate("customers")}
         />
-        <MetricCard
-          label="Low stock"
-          value={lowStockItems.length}
-          note={
-            productsLoading
-              ? "Loading stock"
-              : lowStockItems.length === 0
-                ? "All items well stocked"
-                : `${countNote(lowStockItems.length, "item")} need restock`
-          }
-          icon={AlertTriangle}
-          tone="amber"
-          trend={lowStockItems.length > 0 ? "alert" : "neutral"}
-          onClick={() => onNavigate("inventory")}
-        />
+        {!effectiveIsCashier && (
+          <MetricCard
+            label="Low stock"
+            value={lowStockItems.length}
+            note={
+              productsLoading
+                ? "Loading stock"
+                : lowStockItems.length === 0
+                  ? "All items well stocked"
+                  : `${countNote(lowStockItems.length, "item")} need restock`
+            }
+            icon={AlertTriangle}
+            tone="amber"
+            trend={lowStockItems.length > 0 ? "alert" : "neutral"}
+            onClick={() => onNavigate("inventory")}
+          />
+        )}
       </section>
 
-      <section className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+      <section className={classNames("grid gap-5", effectiveIsCashier ? "grid-cols-1" : "lg:grid-cols-[1.2fr_0.8fr]")}>
         <div className="panel p-4 sm:p-5">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -178,36 +209,54 @@ export function Dashboard({
             <Badge variant="green">Open</Badge>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {[
-              {
-                label: "Create invoice",
-                desc: "Generate bills & quotes",
-                icon: ReceiptText,
-                screen: "more",
-                color: "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white border-indigo-100",
-              },
-              {
-                label: "Record expense",
-                desc: "Log daily shop spending",
-                icon: WalletCards,
-                screen: "expenses",
-                color: "bg-rose-50 text-rose-600 group-hover:bg-rose-600 group-hover:text-white border-rose-100",
-              },
-              {
-                label: "Stock in",
-                desc: "Add or restock items",
-                icon: Boxes,
-                screen: "inventory",
-                color: "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white border-emerald-100",
-              },
-              {
-                label: "Customers",
-                desc: "Directory & debt collection",
-                icon: UsersRound,
-                screen: "customers",
-                color: "bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white border-purple-100",
-              },
-            ].map((action) => (
+            {(effectiveIsCashier
+              ? [
+                  {
+                    label: "New POS Sale",
+                    desc: "Ring up sale & print receipt",
+                    icon: ShoppingCart,
+                    screen: "sales",
+                    color: "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white border-emerald-100",
+                  },
+                  {
+                    label: "Customers & Debt",
+                    desc: "Directory & debt collection",
+                    icon: UsersRound,
+                    screen: "customers",
+                    color: "bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white border-purple-100",
+                  },
+                ]
+              : [
+                  {
+                    label: "Create invoice",
+                    desc: "Generate bills & quotes",
+                    icon: ReceiptText,
+                    screen: "more",
+                    color: "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white border-indigo-100",
+                  },
+                  {
+                    label: "Record expense",
+                    desc: "Log daily shop spending",
+                    icon: WalletCards,
+                    screen: "expenses",
+                    color: "bg-rose-50 text-rose-600 group-hover:bg-rose-600 group-hover:text-white border-rose-100",
+                  },
+                  {
+                    label: "Stock in",
+                    desc: "Add or restock items",
+                    icon: Boxes,
+                    screen: "inventory",
+                    color: "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white border-emerald-100",
+                  },
+                  {
+                    label: "Customers",
+                    desc: "Directory & debt collection",
+                    icon: UsersRound,
+                    screen: "customers",
+                    color: "bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white border-purple-100",
+                  },
+                ]
+            ).map((action) => (
               <button
                 key={action.label}
                 className="group flex min-h-20 items-center justify-between gap-4 rounded-2xl border border-slate-200/90 bg-white p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md active:scale-[0.98]"
@@ -228,38 +277,40 @@ export function Dashboard({
           </div>
         </div>
 
-        <div className="panel p-4 sm:p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="label">Low stock alert</p>
-              <h2 className="mt-1 text-lg font-black text-ink">Needs attention</h2>
+        {!effectiveIsCashier && (
+          <div className="panel p-4 sm:p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="label">Low stock alert</p>
+                <h2 className="mt-1 text-lg font-black text-ink">Needs attention</h2>
+              </div>
+              <button className="text-sm font-bold text-palm hover:text-palmDeep transition" onClick={() => onNavigate("inventory")}>
+                View stock
+              </button>
             </div>
-            <button className="text-sm font-bold text-palm hover:text-palmDeep transition" onClick={() => onNavigate("inventory")}>
-              View stock
-            </button>
-          </div>
-          <div className="mt-4 space-y-3">
-            {productsLoading ? <LoadingState>Loading stock</LoadingState> : null}
-            {!productsLoading && !lowStockItems.length ? (
-              <EmptyState>No low stock items.</EmptyState>
-            ) : null}
-            {!productsLoading &&
-              lowStockItems.map((product) => (
-                <div
-                  key={product.id}
-                  className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200/80 bg-amber-50/50 p-3 transition hover:bg-amber-50"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-black text-ink">{product.name}</p>
-                    <p className="text-xs font-medium text-slate-500">
-                      {[product.size, product.colour].filter(Boolean).join(" | ") || "Stock item"}
-                    </p>
+            <div className="mt-4 space-y-3">
+              {productsLoading ? <LoadingState>Loading stock</LoadingState> : null}
+              {!productsLoading && !lowStockItems.length ? (
+                <EmptyState>No low stock items.</EmptyState>
+              ) : null}
+              {!productsLoading &&
+                lowStockItems.map((product) => (
+                  <div
+                    key={product.id}
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200/80 bg-amber-50/50 p-3 transition hover:bg-amber-50"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-ink">{product.name}</p>
+                      <p className="text-xs font-medium text-slate-500">
+                        {[product.size, product.colour].filter(Boolean).join(" | ") || "Stock item"}
+                      </p>
+                    </div>
+                    <Badge variant="amber">{product.quantity} left</Badge>
                   </div>
-                  <Badge variant="amber">{product.quantity} left</Badge>
-                </div>
-              ))}
+                ))}
+            </div>
           </div>
-        </div>
+        )}
       </section>
 
       <section className="grid gap-5 lg:grid-cols-2">

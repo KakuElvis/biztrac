@@ -19,6 +19,9 @@ import {
   WifiOff,
   X,
   Zap,
+  ShoppingCart,
+  Crown,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "../../components/common/Button.jsx";
 import { AppLogo } from "../../components/common/AppLogo.jsx";
@@ -26,6 +29,7 @@ import { isSupabaseConfigured } from "../../lib/supabase.js";
 import {
   sendPasswordReset,
   signIn,
+  signInWithStaffId,
   signUpWithBusiness,
   updatePassword,
 } from "../../services/authService.js";
@@ -638,8 +642,17 @@ function RegisterForm({ onSuccess, onSwitchToLogin }) {
 }
 
 function LoginForm({ onSwitchToRegister }) {
+  const [loginType, setLoginType] = useState(() => {
+    try {
+      return localStorage.getItem("biztrac_last_login_type") || "staff";
+    } catch {
+      return "staff";
+    }
+  });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [staffId, setStaffId] = useState("");
+  const [staffPassword, setStaffPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -653,12 +666,22 @@ function LoginForm({ onSwitchToRegister }) {
   async function handleSubmit(event) {
     event.preventDefault();
     setNotice(null);
-
     setIsLoading(true);
+
     try {
-      await signIn({ email: email.trim(), password });
+      if (loginType === "staff") {
+        await signInWithStaffId({
+          staffId: staffId.trim(),
+          password: staffPassword,
+        });
+      } else {
+        await signIn({ email: email.trim(), password });
+      }
     } catch (error) {
-      setNotice({ type: "error", text: error.message || "Failed to sign in. Please verify your credentials." });
+      setNotice({
+        type: "error",
+        text: error.message || "Failed to sign in. Please verify your credentials.",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -687,6 +710,16 @@ function LoginForm({ onSwitchToRegister }) {
     }
   }
 
+  const handleSelectLoginType = (type) => {
+    setLoginType(type);
+    setNotice(null);
+    try {
+      localStorage.setItem("biztrac_last_login_type", type);
+    } catch {
+      // Ignore error
+    }
+  };
+
   return (
     <>
       <form className="mt-5 space-y-4" onSubmit={handleSubmit}>
@@ -695,65 +728,139 @@ function LoginForm({ onSwitchToRegister }) {
             <Sparkles className="h-3 w-3" />
             <span>Counter Terminal</span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-black text-ink">Sign in to counter</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-ink">
+            {loginType === "staff" ? "Staff & Cashier Sign In" : "Store Owner Sign In"}
+          </h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            Access your sales terminal, inventory catalog, and daily profits.
+            {loginType === "staff"
+              ? "Sign in with your assigned Staff ID and password to ring up sales and print receipts."
+              : "Access your owner dashboard, inventory restocks, and business financial reports."}
           </p>
         </div>
 
-        {!isSupabaseConfigured ? (
+        {/* Staff ID vs Owner Email Switcher */}
+        <div className="grid grid-cols-2 rounded-2xl bg-slate-100 p-1">
+          <button
+            type="button"
+            onClick={() => handleSelectLoginType("staff")}
+            className={`flex items-center justify-center gap-1.5 h-10 rounded-xl text-xs font-black transition-all ${
+              loginType === "staff"
+                ? "bg-white text-emerald-800 shadow-sm scale-[1.01]"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <ShoppingCart className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Staff / Cashier</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSelectLoginType("owner")}
+            className={`flex items-center justify-center gap-1.5 h-10 rounded-xl text-xs font-black transition-all ${
+              loginType === "owner"
+                ? "bg-white text-palm shadow-sm scale-[1.01]"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <Crown className="h-3.5 w-3.5 text-palm" />
+            <span>Store Owner</span>
+          </button>
+        </div>
+
+        {loginType === "owner" && !isSupabaseConfigured ? (
           <StatusMessage type="error">
             Live accounts are unavailable until Supabase environment keys are added to .env.
           </StatusMessage>
         ) : null}
         {notice ? <StatusMessage type={notice.type}>{notice.text}</StatusMessage> : null}
 
-        <div className="space-y-3.5">
-          <Field
-            icon={Mail}
-            label="Email Address"
-            name="email"
-            placeholder="owner@business.com"
-            type="email"
-            inputMode="email"
-            autoCapitalize="none"
-            autoCorrect="off"
-            autoComplete="username"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            autoFocus
-            required
-          />
+        {loginType === "staff" ? (
+          <div className="space-y-3.5">
+            <div>
+              <Field
+                icon={UserRound}
+                label="Staff ID"
+                name="staffId"
+                placeholder="e.g. AF190"
+                type="text"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                autoComplete="username"
+                value={staffId}
+                onChange={(event) => setStaffId(event.target.value.toUpperCase())}
+                autoFocus
+                required
+              />
+              <p className="mt-1 text-[11px] text-slate-400">
+                Alphanumeric format (2 letters + 3 numbers). Case-insensitive.
+              </p>
+            </div>
 
-          <PasswordField
-            label="Password"
-            name="password"
-            placeholder="Enter your password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            showPassword={showPassword}
-            onToggleShow={() => setShowPassword((s) => !s)}
-            autoComplete="current-password"
-            required
-          />
-        </div>
+            <PasswordField
+              label="Staff Password"
+              name="staffPassword"
+              placeholder="Enter your staff password"
+              value={staffPassword}
+              onChange={(event) => setStaffPassword(event.target.value)}
+              showPassword={showPassword}
+              onToggleShow={() => setShowPassword((s) => !s)}
+              autoComplete="current-password"
+              required
+            />
+          </div>
+        ) : (
+          <div className="space-y-3.5">
+            <Field
+              icon={Mail}
+              label="Email Address"
+              name="email"
+              placeholder="owner@business.com"
+              type="email"
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="username"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              autoFocus
+              required
+            />
+
+            <PasswordField
+              label="Password"
+              name="password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              showPassword={showPassword}
+              onToggleShow={() => setShowPassword((s) => !s)}
+              autoComplete="current-password"
+              required
+            />
+          </div>
+        )}
 
         <div className="flex items-center justify-between text-xs pt-0.5">
           <label className="flex items-center gap-2 cursor-pointer text-slate-600 select-none py-1">
             <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-palm focus:ring-palm" />
             <span className="font-semibold text-xs">Remember this device</span>
           </label>
-          <button
-            type="button"
-            className="font-bold text-palm hover:text-palmDeep transition py-1 text-xs"
-            disabled={isLoading || !isSupabaseConfigured}
-            onClick={() => {
-              setResetEmail(email);
-              setShowResetModal(true);
-            }}
-          >
-            Forgot password?
-          </button>
+          {loginType === "owner" ? (
+            <button
+              type="button"
+              className="font-bold text-palm hover:text-palmDeep transition py-1 text-xs"
+              disabled={isLoading || !isSupabaseConfigured}
+              onClick={() => {
+                setResetEmail(email);
+                setShowResetModal(true);
+              }}
+            >
+              Forgot password?
+            </button>
+          ) : (
+            <span className="text-[11px] text-slate-400 font-medium">
+              Offline counter enabled
+            </span>
+          )}
         </div>
 
         <div className="pt-1">
@@ -762,9 +869,9 @@ function LoginForm({ onSwitchToRegister }) {
             className="w-full h-12 text-sm font-black shadow-lg shadow-palm/20"
             icon={ArrowRight}
             isLoading={isLoading}
-            disabled={!isSupabaseConfigured}
+            disabled={loginType === "owner" && !isSupabaseConfigured}
           >
-            Sign In to Terminal
+            {loginType === "staff" ? "Sign In as Staff" : "Sign In to Terminal"}
           </Button>
         </div>
 

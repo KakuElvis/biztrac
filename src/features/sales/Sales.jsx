@@ -81,6 +81,7 @@ function buildReceiptText(receipt, business) {
     "",
     `Receipt: ${receipt.reference || "Draft"}`,
     `Date: ${formatReceiptDate(receipt.createdAt || new Date().toISOString())}`,
+    receipt.cashierName ? `Cashier: ${receipt.cashierName}` : "",
     `Customer: ${receipt.customerName || "Walk-in"}`,
     `Payment: ${receipt.paymentType || "Cash"}`,
     receipt.paymentAccount ? `Account / Ref: ${receipt.paymentAccount}` : "",
@@ -279,6 +280,8 @@ function downloadFile(file) {
 
 export function Sales({
   business,
+  currentUser,
+  canViewProfit = true,
   categories = [],
   customers = [],
   customersError,
@@ -298,6 +301,25 @@ export function Sales({
   const queuedCount = propQueuedCount !== undefined ? propQueuedCount : localQueuedCount;
   const isSyncing = propIsSyncing !== undefined ? propIsSyncing : false;
   const [lastReceipt, setLastReceipt] = useState(null);
+
+  const cashierName = useMemo(() => {
+    if (currentUser?.fullName && currentUser?.staffId) {
+      return `${currentUser.fullName} (${currentUser.staffId})`;
+    }
+    if (currentUser?.fullName) {
+      return currentUser.fullName;
+    }
+    if (currentUser?.user_metadata?.full_name) {
+      return currentUser.user_metadata.full_name;
+    }
+    if (currentUser?.staffId) {
+      return `Staff ${currentUser.staffId}`;
+    }
+    if (business?.owner) {
+      return business.owner;
+    }
+    return "Store Cashier";
+  }, [currentUser, business?.owner]);
 
   // Hook completed sale receipt into Android Back Button to reset counter
   useBackButtonModal(Boolean(lastReceipt), () => setLastReceipt(null), "sales-receipt");
@@ -398,6 +420,7 @@ export function Sales({
     ? {
         reference: "Draft receipt",
         customerName: getCustomerName(),
+        cashierName,
         lines: cartLines.map(toReceiptLine),
         paymentType,
         total,
@@ -624,6 +647,10 @@ export function Sales({
       parsedAmountPaid = total;
     }
 
+    if (cashierName) {
+      paymentNotes = paymentNotes ? `${paymentNotes} | Sold by: ${cashierName}` : `Sold by: ${cashierName}`;
+    }
+
     setIsSaving(true);
     try {
       const sale = await onCompleteSale({
@@ -637,6 +664,7 @@ export function Sales({
       const receipt = {
         reference: sale.reference,
         customerName: getCustomerName(),
+        cashierName,
         lines: cartLines.map(toReceiptLine),
         paymentType,
         total,
@@ -688,6 +716,7 @@ export function Sales({
           const draftReceipt = {
             reference: `OFFLINE-${createdAt.replace(/[:.]/g, "-")}`,
             customerName: getCustomerName(),
+            cashierName,
             lines: cartLines.map(toReceiptLine),
             paymentType,
             total,
@@ -1551,6 +1580,7 @@ export function Sales({
           <ReceiptPreview
             business={business}
             receipt={previewReceipt}
+            canViewProfit={canViewProfit}
           />
 
           {queuedCount ? (
@@ -1637,7 +1667,7 @@ export function Sales({
   );
 }
 
-function ReceiptPreview({ business, receipt }) {
+function ReceiptPreview({ business, receipt, canViewProfit = true }) {
   const businessName = business?.name || "BizTrac";
   const lines = receipt?.lines || [];
 
@@ -1654,14 +1684,21 @@ function ReceiptPreview({ business, receipt }) {
           <span>{receipt?.reference || "Draft receipt"}</span>
           <span>{receipt?.paymentType || "Cash"}</span>
         </div>
+        {receipt?.cashierName ? (
+          <div className="mt-1.5 flex items-center justify-between text-xs font-semibold text-slate-600">
+            <span>Cashier:</span>
+            <span className="font-bold text-ink">{receipt.cashierName}</span>
+          </div>
+        ) : null}
         {receipt?.paymentAccount ? (
           <p className="mt-1 text-xs font-black text-palm">
             Account / Ref: {receipt.paymentAccount}
           </p>
         ) : null}
-        <p className="mt-2 text-xs font-bold text-slate-500">
-          Customer: {receipt?.customerName || "Walk-in"}
-        </p>
+        <div className="mt-1.5 flex items-center justify-between text-xs font-bold text-slate-500">
+          <span>Customer:</span>
+          <span className="font-bold text-ink">{receipt?.customerName || "Walk-in"}</span>
+        </div>
         <div className="mt-4 space-y-3">
           {lines.map((line) => (
             <div key={line.productId} className="flex justify-between gap-3 text-sm">
@@ -1676,10 +1713,12 @@ function ReceiptPreview({ business, receipt }) {
           ) : null}
         </div>
         <div className="mt-4 border-t border-dashed border-slate-200 pt-4 space-y-1.5">
-          <div className="flex justify-between text-sm font-bold text-slate-500">
-            <span>Estimated profit</span>
-            <span>{formatCurrency(receipt?.profit || 0)}</span>
-          </div>
+          {canViewProfit && (
+            <div className="flex justify-between text-sm font-bold text-slate-500">
+              <span>Estimated profit</span>
+              <span>{formatCurrency(receipt?.profit || 0)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-xl font-black text-ink">
             <span>Total</span>
             <span>{formatCurrency(receipt?.total || 0)}</span>

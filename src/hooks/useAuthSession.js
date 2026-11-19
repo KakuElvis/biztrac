@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { getSession, getWorkspace, signOut, subscribeToAuthChanges } from "../services/authService.js";
+import { cacheCurrentBusiness } from "../services/staffService.js";
 import { showToast } from "../lib/toast.js";
 
 export function useAuthSession() {
@@ -12,9 +13,29 @@ export function useAuthSession() {
   useEffect(() => {
     let isMounted = true;
 
+    const handleAuthEvent = (e) => {
+      if (!isMounted) return;
+      const next = e.detail;
+      setSession(next);
+      if (next?.workspace) {
+        setWorkspace(next.workspace);
+      } else if (!next) {
+        setWorkspace(null);
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("biztrac:auth-change", handleAuthEvent);
+    }
+
     getSession()
       .then((currentSession) => {
-        if (isMounted) setSession(currentSession);
+        if (isMounted) {
+          setSession(currentSession);
+          if (currentSession?.workspace) {
+            setWorkspace(currentSession.workspace);
+          }
+        }
       })
       .catch((error) => {
         console.error("Unable to restore session", error);
@@ -33,6 +54,9 @@ export function useAuthSession() {
     return () => {
       isMounted = false;
       unsubscribe();
+      if (typeof window !== "undefined") {
+        window.removeEventListener("biztrac:auth-change", handleAuthEvent);
+      }
     };
   }, []);
 
@@ -41,6 +65,13 @@ export function useAuthSession() {
 
     if (!session?.user) {
       setWorkspace(null);
+      setWorkspaceLoading(false);
+      return undefined;
+    }
+
+    // For staff sessions, workspace is already resolved directly
+    if (session.isStaffSession && session.workspace) {
+      setWorkspace(session.workspace);
       setWorkspaceLoading(false);
       return undefined;
     }
@@ -68,7 +99,9 @@ export function useAuthSession() {
       session?.user?.user_metadata?.full_name || session?.user?.email || "there";
 
     if (!workspace?.business) {
+      const fallbackId = session?.user?.id ? `biz-${session.user.id}` : "default-business";
       return {
+        id: fallbackId,
         name: "BizTrac",
         owner: fallbackOwner,
         logoText: "BT",
@@ -85,22 +118,27 @@ export function useAuthSession() {
     }
 
     const current = workspace.business;
-    const initials = current.name
+    const initials = (current.name || "BizTrac")
       .split(/\s+/)
       .slice(0, 2)
       .map((word) => word[0])
       .join("")
       .toUpperCase();
 
-    return {
+    const resolved = {
       ...current,
       logoText: initials || "BT",
       owner: fallbackOwner,
     };
+
+    cacheCurrentBusiness(resolved);
+    return resolved;
   }, [session, workspace]);
 
   const handleSignOut = async (resetStates) => {
     try {
+      setSession(null);
+      setWorkspace(null);
       await signOut();
       resetStates?.();
     } catch (error) {

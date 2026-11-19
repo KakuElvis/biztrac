@@ -88,8 +88,25 @@ describe("Receipt Settings & Thermal Formatting", () => {
     const html = buildReceiptHtml(sampleTestReceipt, business);
     expect(html).toContain("Kaneshie Ventures");
     expect(html).toContain("TEST-RECEIPT-001");
+    expect(html).toContain("Store Cashier");
     expect(html).toContain("MoMo: 0244112233");
     expect(html).toContain("72mm"); // 80mm printable width
+  });
+
+  it("renders cashier name on receipt HTML when provided", () => {
+    const business = { name: "Accra Mart", receipt_width: "58mm" };
+    const receiptWithCashier = {
+      reference: "REC-CASHIER-01",
+      cashierName: "Abena Mensah (YL166)",
+      customerName: "Kojo Antwi",
+      paymentType: "Cash",
+      lines: [{ name: "Sugar 1kg", quantity: 2, unitPrice: 20, total: 40 }],
+      total: 40,
+    };
+
+    const html = buildReceiptHtml(receiptWithCashier, business);
+    expect(html).toContain("<span>Cashier:</span>");
+    expect(html).toContain("<strong>Abena Mensah (YL166)</strong>");
   });
 
   it("formats MoMo and Bank payment account and amount paid into receipt HTML", () => {

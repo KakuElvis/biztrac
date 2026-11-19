@@ -17,12 +17,17 @@ import {
   UsersRound,
   WalletCards,
   Zap,
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  Lock,
 } from "lucide-react";
 import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
 import { formatCurrency } from "../../lib/formatters.js";
 import { printThermalReceipt, sampleTestReceipt } from "../../lib/receiptHtml.js";
 import { showToast } from "../../lib/toast.js";
+import { StaffManagement } from "../staff/index.js";
 
 const fallbackBusiness = {
   name: "BizTrac",
@@ -67,6 +72,12 @@ function EmptyState({ children }) {
 
 export function More({
   business = fallbackBusiness,
+  currentUser,
+  permissions,
+  canManageSettings = true,
+  canManageStaff = true,
+  previewRole,
+  onSetPreviewRole,
   dashboardSummary,
   onNavigate,
   onSignOut,
@@ -75,6 +86,7 @@ export function More({
 }) {
   const debtors = dashboardSummary?.debtors || [];
   const [form, setForm] = useState(() => toBusinessForm(business));
+  const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSuccess, setProfileSuccess] = useState("");
@@ -100,6 +112,11 @@ export function More({
 
   async function handleSaveProfile(event) {
     if (event?.preventDefault) event.preventDefault();
+    if (!canManageSettings) {
+      setProfileError("Store profile can only be modified by the Store Owner or Manager.");
+      showToast("Access restricted: View only for cashiers", { type: "warn" });
+      return;
+    }
     setProfileError("");
     setProfileSuccess("");
 
@@ -135,6 +152,11 @@ export function More({
 
   async function handleSaveReceiptSettings(event) {
     if (event?.preventDefault) event.preventDefault();
+    if (!canManageSettings) {
+      setReceiptError("Receipt settings can only be modified by the Store Owner or Manager.");
+      showToast("Access restricted: View only for cashiers", { type: "warn" });
+      return;
+    }
     setReceiptError("");
     setReceiptSuccess("");
 
@@ -216,6 +238,61 @@ export function More({
         </div>
       </section>
 
+      {/* Team & Staff Roles Card */}
+      <section className="panel p-4 sm:p-5 border-l-4 border-l-palm">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-palm/10 text-palm">
+              <ShieldCheck className="h-6 w-6" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-palm">Security & Control</p>
+                {permissions?.roleMeta && (
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border ${permissions.roleMeta.badgeBg}`}>
+                    {permissions.roleMeta.shortLabel}
+                  </span>
+                )}
+                {permissions?.isSimulating && (
+                  <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
+                    Simulated
+                  </span>
+                )}
+              </div>
+              <h3 className="text-base font-black text-ink">Staff & Cashier Permissions</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {permissions?.isCashier
+                  ? "Your account is in Cashier mode. Confidential store profits and cost prices are hidden."
+                  : "Add counter cashiers, manage access, and keep financial profit margins confidential."}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {permissions?.isOwnerOrAdmin && onSetPreviewRole && (
+              <button
+                type="button"
+                onClick={() => onSetPreviewRole(previewRole ? null : "staff")}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 hover:border-palm hover:text-palm transition shadow-xs flex items-center gap-1.5 active:scale-95"
+              >
+                {previewRole ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                <span>{previewRole ? "Exit Cashier View" : "Test Cashier View"}</span>
+              </button>
+            )}
+            {canManageStaff && (
+              <button
+                type="button"
+                onClick={() => setIsStaffModalOpen(true)}
+                className="rounded-xl bg-palm px-4 py-2 text-xs font-black text-white hover:bg-palmDeep transition shadow-xs flex items-center gap-1.5 active:scale-95"
+              >
+                <UsersRound className="h-3.5 w-3.5" />
+                <span>Manage Team</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+
       {/* Row 1: Dedicated Business Profile Card (Left) & Quick Links / Debtors (Right) */}
       <section className="grid gap-5 lg:grid-cols-2">
         <form className="panel p-4 sm:p-5 flex flex-col justify-between" onSubmit={handleSaveProfile}>
@@ -229,6 +306,13 @@ export function More({
                 <p className="text-xs font-semibold text-slate-500">Contact & store identification details</p>
               </div>
             </div>
+
+            {!canManageSettings && (
+              <div className="mt-3 flex items-center gap-2 rounded-xl bg-slate-100 p-2.5 text-xs font-semibold text-slate-600">
+                <Lock className="h-4 w-4 shrink-0 text-slate-400" />
+                <span>Store profile is managed by Store Owner / Admin. Cashier view is read-only.</span>
+              </div>
+            )}
 
             <div className="mt-4 grid gap-4">
               <label>
@@ -279,7 +363,7 @@ export function More({
                 {profileSuccess}
               </div>
             ) : null}
-            <Button icon={Store} isLoading={profileSaving} type="submit">
+            <Button icon={Store} isLoading={profileSaving} type="submit" disabled={!canManageSettings}>
               Save Business Profile
             </Button>
           </div>
@@ -381,6 +465,13 @@ export function More({
                 </div>
               </div>
             </div>
+
+            {!canManageSettings && (
+              <div className="mt-3 flex items-center gap-2 rounded-xl bg-slate-100 p-2.5 text-xs font-semibold text-slate-600">
+                <Lock className="h-4 w-4 shrink-0 text-slate-400" />
+                <span>Printer and receipt settings are managed by Store Owner / Admin. Cashier view is read-only.</span>
+              </div>
+            )}
 
             <div className="mt-4 grid gap-4">
               <div>
@@ -513,7 +604,7 @@ export function More({
               </div>
             ) : null}
             <div className="flex flex-col sm:flex-row gap-2">
-              <Button icon={Printer} isLoading={receiptSaving} type="submit" className="flex-1">
+              <Button icon={Printer} isLoading={receiptSaving} type="submit" disabled={!canManageSettings} className="flex-1">
                 Save Receipt Settings
               </Button>
               <button
@@ -685,6 +776,16 @@ export function More({
       <p className="text-center text-xs font-semibold text-slate-500">
         Product developed by KwameKaku
       </p>
+
+      <StaffManagement
+        business={business}
+        currentUser={currentUser}
+        permissions={permissions}
+        previewRole={previewRole}
+        onSetPreviewRole={onSetPreviewRole}
+        isOpen={isStaffModalOpen}
+        onClose={() => setIsStaffModalOpen(false)}
+      />
     </div>
   );
 }

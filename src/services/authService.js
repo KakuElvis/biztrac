@@ -1,5 +1,10 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabase.js";
 import { toBusiness } from "./businessService.js";
+import {
+  getActiveStaffSession,
+  clearActiveStaffSession,
+  loginWithStaffId,
+} from "./staffService.js";
 
 function requireSupabase() {
   if (!isSupabaseConfigured || !supabase) {
@@ -10,6 +15,10 @@ function requireSupabase() {
 }
 
 export async function getSession() {
+  // Check active staff session first if present
+  const staffSession = getActiveStaffSession();
+  if (staffSession) return staffSession;
+
   if (!isSupabaseConfigured) return null;
 
   const { data, error } = await requireSupabase().auth.getSession();
@@ -55,9 +64,14 @@ export async function signUpWithBusiness({
 }
 
 export async function signIn({ email, password }) {
+  clearActiveStaffSession();
   const { data, error } = await requireSupabase().auth.signInWithPassword({ email, password });
   if (error) throw error;
   return data;
+}
+
+export async function signInWithStaffId({ staffId, password }) {
+  return loginWithStaffId({ staffId, password });
 }
 
 export async function sendPasswordReset(email) {
@@ -73,6 +87,7 @@ export async function updatePassword(password) {
 }
 
 export async function signOut() {
+  clearActiveStaffSession();
   if (!isSupabaseConfigured) return;
 
   const { error } = await requireSupabase().auth.signOut();

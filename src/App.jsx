@@ -13,6 +13,7 @@ import { usePWA } from "./hooks/usePWA.js";
 import { handleBackPop, clearBackStack } from "./services/navigation/backStackService.js";
 import { useBackButtonModal } from "./hooks/useBackButtonModal.js";
 import { showToast } from "./lib/toast.js";
+import { usePermissions } from "./features/staff/index.js";
 
 const Dashboard = lazy(() => import("./features/dashboard/Dashboard.jsx").then((m) => ({ default: m.Dashboard || m.default })));
 const Inventory = lazy(() => import("./features/inventory/Inventory.jsx").then((m) => ({ default: m.Inventory || m.default })));
@@ -31,6 +32,8 @@ const screens = {
   expenses: Expenses,
   more: More,
 };
+
+const CASHIER_RESTRICTED_SCREENS = ["inventory", "reports", "expenses", "more"];
 
 function getScreenFromUrl() {
   if (typeof window === "undefined") return "dashboard";
@@ -64,7 +67,10 @@ export default function App() {
 
   const [activeScreen, setActiveScreen] = useState(getScreenFromUrl);
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [previewRole, setPreviewRole] = useState(null);
   const lastBackPressRef = useRef(0);
+
+  const permissions = usePermissions(workspace?.role, previewRole);
 
   // Hook password recovery screen into the back stack
   useBackButtonModal(
@@ -79,6 +85,13 @@ export default function App() {
   const handleNavigate = useCallback((nextScreen, { replace = false } = {}) => {
     if (!screens[nextScreen]) return;
 
+    if (permissions?.isCashier && CASHIER_RESTRICTED_SCREENS.includes(nextScreen)) {
+      showToast("Access restricted. This section is only available to store owners and managers.", {
+        type: "info",
+      });
+      return;
+    }
+
     setActiveScreen(nextScreen);
 
     if (typeof window !== "undefined") {
@@ -91,7 +104,15 @@ export default function App() {
         window.history.pushState({ screen: nextScreen }, "", url.toString());
       }
     }
-  }, []);
+  }, [permissions?.isCashier]);
+
+  // Guard activeScreen: immediately bounce cashier away if currently on a restricted screen
+  useEffect(() => {
+    if (permissions?.isCashier && CASHIER_RESTRICTED_SCREENS.includes(activeScreen)) {
+      showToast("Access restricted. Redirecting to Sales.", { type: "info" });
+      handleNavigate("sales", { replace: true });
+    }
+  }, [permissions?.isCashier, activeScreen, handleNavigate]);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -133,6 +154,11 @@ export default function App() {
         return;
       }
 
+      if (permissions?.isCashier && CASHIER_RESTRICTED_SCREENS.includes(target)) {
+        setActiveScreen("sales");
+        return;
+      }
+
       if (screens[target]) {
         setActiveScreen(target);
       } else {
@@ -142,7 +168,7 @@ export default function App() {
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [activeScreen]);
+  }, [activeScreen, permissions?.isCashier]);
 
   const {
     products,
@@ -342,13 +368,29 @@ export default function App() {
       isSyncing={isSyncing}
       onTriggerSync={triggerSync}
       pwaState={pwaState}
+      permissions={permissions}
+      previewRole={previewRole}
+      onSetPreviewRole={setPreviewRole}
     >
       <Suspense fallback={<div className="p-6">Loading…</div>}>
         <Screen
           business={business}
-          canDeleteProducts={["owner", "admin"].includes(workspace?.role)}
-          canManageCategories={["owner", "admin"].includes(workspace?.role)}
-          canForgiveDebt={["owner", "admin"].includes(workspace?.role)}
+          currentUser={session?.user}
+          permissions={permissions}
+          previewRole={previewRole}
+          onSetPreviewRole={setPreviewRole}
+          canDeleteProducts={permissions.canDeleteProducts}
+          canManageCategories={permissions.canManageCategories}
+          canForgiveDebt={permissions.canForgiveDebt}
+          canViewProfit={permissions.canViewProfit}
+          canViewCostPrice={permissions.canViewCostPrice}
+          canManageSettings={permissions.canManageSettings}
+          canManageStaff={permissions.canManageStaff}
+          canRestock={permissions.canRestock}
+          canCreateProduct={permissions.canCreateProduct}
+          canEditProduct={permissions.canEditProduct}
+          canViewFinancialReports={permissions.canViewFinancialReports}
+          isCashier={permissions.isCashier}
           categories={categories}
           categoriesError={categoriesError}
           categoriesLoading={categoriesLoading}

@@ -11,6 +11,9 @@ import {
   UsersRound,
   WalletCards,
   Smartphone,
+  Eye,
+  EyeOff,
+  Lock,
 } from "lucide-react";
 import { AppLogo } from "../../components/common/AppLogo.jsx";
 import { classNames } from "../../lib/formatters.js";
@@ -41,8 +44,19 @@ export function AppShell({
   isSyncing = false,
   onTriggerSync,
   pwaState = {},
+  permissions,
+  onSetPreviewRole,
 }) {
   const { canInstall, isInstalled, isIOS, needRefresh, onInstallPwa, onUpdatePwa } = pwaState;
+  const isCashier = Boolean(permissions?.isCashier);
+
+  const visibleNavItems = isCashier
+    ? navItems.filter((item) => !["inventory", "reports", "more"].includes(item.id))
+    : navItems;
+
+  const visibleMobileNavItems = isCashier
+    ? navItems.filter((item) => !["inventory", "reports", "expenses", "more"].includes(item.id))
+    : mobileNavItems;
 
   return (
     <div className="min-h-screen pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-0">
@@ -50,7 +64,7 @@ export function AppShell({
         <aside className="sticky top-0 hidden h-screen border-r border-slate-200 bg-white/85 p-5 backdrop-blur lg:flex lg:flex-col">
           <Brand />
           <nav className="mt-8 space-y-2">
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <NavButton
                 key={item.id}
                 item={item}
@@ -58,11 +72,13 @@ export function AppShell({
                 onClick={() => onNavigate(item.id)}
               />
             ))}
-            <NavButton
-              item={{ id: "expenses", label: "Expenses", icon: WalletCards }}
-              active={activeScreen === "expenses"}
-              onClick={() => onNavigate("expenses")}
-            />
+            {!isCashier && (
+              <NavButton
+                item={{ id: "expenses", label: "Expenses", icon: WalletCards }}
+                active={activeScreen === "expenses"}
+                onClick={() => onNavigate("expenses")}
+              />
+            )}
           </nav>
           
           {(canInstall || isIOS) && !isInstalled ? (
@@ -107,6 +123,11 @@ export function AppShell({
                   <p className="truncate text-sm font-black text-ink">{business.name}</p>
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate text-xs font-medium text-slate-500">{business.location}</p>
+                    {permissions?.roleMeta && (
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border ${permissions.roleMeta.badgeBg}`}>
+                        {permissions.roleMeta.shortLabel}
+                      </span>
+                    )}
                     <span
                       className={classNames(
                         "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold shadow-xs",
@@ -137,14 +158,27 @@ export function AppShell({
                     <span className="hidden sm:inline">Install App</span>
                   </button>
                 ) : null}
-                <button
-                  className="icon-button"
-                  aria-label="Search inventory"
-                  title="Search inventory"
-                  onClick={() => onNavigate("inventory")}
-                >
-                  <Search className="h-5 w-5" />
-                </button>
+                {!isCashier ? (
+                  <button
+                    className="icon-button"
+                    aria-label="Search inventory"
+                    title="Search inventory"
+                    onClick={() => onNavigate("inventory")}
+                  >
+                    <Search className="h-5 w-5" />
+                  </button>
+                ) : null}
+                {isCashier ? (
+                  <button
+                    type="button"
+                    onClick={onSignOut}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-bold text-rose-700 transition hover:bg-rose-100 hover:text-rose-800"
+                    title="Sign out / End cashier shift"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span className="hidden sm:inline">Sign Out</span>
+                  </button>
+                ) : null}
                 <button
                   className="hidden min-h-11 items-center gap-2 rounded-xl bg-palm px-4 text-sm font-bold text-white shadow-lg shadow-palm/20 transition hover:bg-palmDeep sm:inline-flex"
                   onClick={() => onNavigate("sales")}
@@ -157,6 +191,24 @@ export function AppShell({
           </header>
 
           <div className="screen-pad mx-auto max-w-5xl pt-4 space-y-3">
+            {permissions?.isSimulating ? (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 rounded-2xl bg-amber-500 px-4 py-3 text-xs font-black text-white shadow-md animate-in fade-in slide-in-from-top duration-200">
+                <div className="flex items-center gap-2">
+                  <EyeOff className="h-4 w-4 shrink-0 text-amber-100" />
+                  <span>
+                    Cashier View Simulation Active — Confidential cost prices and store profit margins are hidden.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onSetPreviewRole?.(null)}
+                  className="self-end sm:self-auto shrink-0 rounded-xl bg-ink px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-900 transition shadow-xs"
+                >
+                  Exit Simulation
+                </button>
+              </div>
+            ) : null}
+
             <PwaBanner
               canInstall={canInstall}
               isInstalled={isInstalled}
@@ -235,8 +287,8 @@ export function AppShell({
       ) : null}
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] pt-2 backdrop-blur lg:hidden">
-        <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
-          {mobileNavItems.map((item) => (
+        <div className={classNames("mx-auto grid gap-1", isCashier ? "max-w-xs grid-cols-3" : "max-w-md grid-cols-5")}>
+          {visibleMobileNavItems.map((item) => (
             <MobileNavButton
               key={item.id}
               item={item}

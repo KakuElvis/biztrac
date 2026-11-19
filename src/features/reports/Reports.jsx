@@ -25,7 +25,10 @@ import {
   TrendingUp,
   UsersRound,
   X,
+  Lock,
+  ReceiptText,
 } from "lucide-react";
+import { MetricCard } from "../../components/cards/MetricCard.jsx";
 import { showToast } from "../../lib/toast.js";
 import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
@@ -291,6 +294,7 @@ function LoadingState({ children }) {
 
 export function Reports({
   business,
+  canViewFinancialReports = true,
   products = [],
   productsLoading,
   reportSummary = emptyReportSummary,
@@ -377,6 +381,78 @@ export function Reports({
   const categoriesList = useMemo(() => {
     return [...new Set(products.map((p) => p.category).filter(Boolean))].sort();
   }, [products]);
+
+  if (!canViewFinancialReports) {
+    return (
+      <div className="space-y-6">
+        {onNavigate ? (
+          <div className="lg:hidden">
+            <button
+              type="button"
+              onClick={() => onNavigate("more")}
+              className="inline-flex items-center gap-1.5 text-xs font-black text-slate-500 hover:text-palm transition"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span>Back to Workspace</span>
+            </button>
+          </div>
+        ) : null}
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm">
+          <div className="flex items-start gap-4">
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-amber-100 text-amber-800">
+              <Lock className="h-6 w-6" />
+            </span>
+            <div>
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-black uppercase tracking-wider text-slate-600">
+                Cashier View
+              </span>
+              <h1 className="mt-1 text-2xl font-black text-ink">Cashier Shift Register</h1>
+              <p className="mt-1 text-xs text-slate-500">
+                Confidential cost and store profit reports are restricted to Store Owners and Managers. Below is your sales activity summary.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-4 sm:grid-cols-3">
+          <MetricCard
+            label="Total Sales Checked Out"
+            value={formatCurrency(summary.salesTotal || 0)}
+            note={`${summary.transactionCount || 0} sales transactions`}
+            icon={ReceiptText}
+            tone="emerald"
+          />
+          <MetricCard
+            label="Total Items Sold"
+            value={summary.itemsSold || 0}
+            note="Units ringing through counter"
+            icon={ShoppingCart}
+            tone="blue"
+          />
+          <MetricCard
+            label="Low Stock Warnings"
+            value={lowStock.length}
+            note="Items needing replenishment"
+            icon={Boxes}
+            tone="amber"
+          />
+        </section>
+
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center space-y-3">
+          <p className="text-sm font-bold text-slate-700">Need full Profit & Loss statements?</p>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            Log in with an Owner or Manager account to access gross margin trends, supplier purchase valuations, and sales vs costs analytics.
+          </p>
+          <div className="pt-2">
+            <Button icon={ShoppingCart} onClick={() => onNavigate?.("sales")}>
+              Return to POS Counter
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
