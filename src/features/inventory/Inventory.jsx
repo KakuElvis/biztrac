@@ -32,6 +32,7 @@ import { showToast } from "../../lib/toast.js";
 import { MaskedValue } from "../staff/index.js";
 
 export function Inventory({
+  business,
   canManageCategories,
   canDeleteProducts,
   canViewCostPrice = true,
@@ -340,6 +341,7 @@ export function Inventory({
       {/* Product Create/Edit Form Modal */}
       {(isCreatingProduct || editingProduct) && (
         <ProductForm
+          business={business}
           categories={categories}
           product={editingProduct}
           onClose={() => {
@@ -551,7 +553,15 @@ function ProductCard({
         </div>
 
         <div className="mt-2 flex items-center justify-between">
-          <Badge variant={isLow ? "amber" : "green"}>{product.quantity} pcs</Badge>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Badge variant={isLow ? "amber" : "green"}>{product.quantity} pcs</Badge>
+            {product.taxTreatment === "zero_rated" && (
+              <Badge variant="blue">0% Tax</Badge>
+            )}
+            {product.taxTreatment === "exempt" && (
+              <Badge variant="slate">Exempt</Badge>
+            )}
+          </div>
           <span className="text-xs font-black text-palm">{formatCurrency(product.sellingPrice)}</span>
         </div>
 
@@ -1074,16 +1084,20 @@ const emptyProduct = {
   colour: "",
   brand: "",
   itemType: "",
+  taxTreatment: "standard",
 };
 
 function ProductForm({
+  business,
   categories,
   product,
   onClose,
   onCreate,
   onUpdate,
 }) {
-  const [form, setForm] = useState(product ? { ...product } : emptyProduct);
+  const [form, setForm] = useState(
+    product ? { taxTreatment: "standard", ...product } : emptyProduct
+  );
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const categoryOptions = useMemo(() => {
@@ -1284,6 +1298,31 @@ function ProductForm({
             />
           </FormField>
         </div>
+
+        {business?.vat_enabled && (
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+            <FormField label="Tax Classification (Ghana Act 1151)">
+              <select
+                className="field mt-1 bg-white font-medium"
+                value={form.taxTreatment || "standard"}
+                onChange={(e) => setField("taxTreatment", e.target.value)}
+              >
+                <option value="standard">
+                  Standard-Rated (20% Combined: 15% VAT + 2.5% NHIL + 2.5% GETFund)
+                </option>
+                <option value="zero_rated">Zero-Rated (0% Taxable Supply)</option>
+                <option value="exempt">Exempt (Completely outside VAT/Levies scope)</option>
+              </select>
+            </FormField>
+            <p className="mt-2 text-[11px] font-semibold text-emerald-800">
+              {form.taxTreatment === "zero_rated"
+                ? "Zero-rated goods attract 0% tax (allows input tax claim where applicable)."
+                : form.taxTreatment === "exempt"
+                ? "Exempt supplies do not attract VAT, NHIL, or GETFund."
+                : "Standard rate: 15% VAT, 2.5% NHIL, and 2.5% GETFund (20% combined effective rate)."}
+            </p>
+          </div>
+        )}
 
         {error && <p className="text-xs font-bold text-red-600">{error}</p>}
 

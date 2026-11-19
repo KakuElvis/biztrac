@@ -159,6 +159,104 @@ describe("Receipt Settings & Thermal Formatting", () => {
     expect(html).not.toContain("NaN");
     expect(html).toContain("TOTAL:");
   });
+
+  it("renders Ghana VAT (Act 1151) tax breakdown and TIN when VAT is enabled", () => {
+    const business = {
+      name: "Accra Super Mart",
+      tin_number: "C0012345678",
+      vat_enabled: true,
+      receipt_width: "80mm",
+    };
+    const vatReceipt = {
+      reference: "REC-VAT-001",
+      cashierName: "Kofi Owusu (YL101)",
+      customerName: "Kwame Kwarteng",
+      paymentType: "Cash",
+      lines: [{ name: "Standard Supply A", quantity: 1, unitPrice: 100, total: 120 }],
+      subtotalExTax: 100.0,
+      totalNhil: 2.5,
+      totalGetfund: 2.5,
+      totalVat: 15.0,
+      totalTax: 20.0,
+      total: 120.0,
+    };
+
+    const html = buildReceiptHtml(vatReceipt, business);
+
+    expect(html).toContain("TIN:");
+    expect(html).toContain("C0012345678");
+    expect(html).toContain("Net Subtotal:");
+    expect(html).toContain("NHIL (2.5%):");
+    expect(html).toContain("GETFund (2.5%):");
+    expect(html).toContain("VAT (15%):");
+    expect(html).toContain("Total Tax (Act 1151):");
+    expect(html).toContain(formatCurrency(20));
+    expect(html).toContain(formatCurrency(120));
+  });
+
+  it("omits tax breakdown and TIN when VAT is disabled on the receipt and business", () => {
+    const business = {
+      name: "Makola Local Mart",
+      vat_enabled: false,
+      receipt_width: "58mm",
+    };
+    const nonVatReceipt = {
+      reference: "REC-NONVAT-002",
+      customerName: "Walk-in",
+      paymentType: "Cash",
+      lines: [{ name: "Plain Bread", quantity: 1, unitPrice: 15, total: 15 }],
+      totalTax: 0,
+      total: 15.0,
+    };
+
+    const html = buildReceiptHtml(nonVatReceipt, business);
+
+    expect(html).not.toContain("TIN:");
+    expect(html).not.toContain("NHIL (2.5%):");
+    expect(html).not.toContain("GETFund (2.5%):");
+    expect(html).not.toContain("VAT (15%):");
+    expect(html).not.toContain("Total Tax (Act 1151):");
+    expect(html).toContain("TOTAL:");
+    expect(html).toContain(formatCurrency(15));
+  });
+
+  it("renders custom tax rate percentages on receipt HTML when modified by business owner", () => {
+    const business = {
+      name: "Tema Port Wholesale",
+      tin_number: "C9988776655",
+      vat_enabled: true,
+      vat_rate: 12.5,
+      nhil_rate: 3.0,
+      getfund_rate: 2.5,
+      receipt_width: "80mm",
+    };
+    const customVatReceipt = {
+      reference: "REC-CUSTOM-VAT-01",
+      customerName: "Amidu & Sons Ltd",
+      paymentType: "Cash",
+      lines: [{ name: "Import Goods Batch", quantity: 1, unitPrice: 200, total: 236 }],
+      subtotalExTax: 200.0,
+      totalNhil: 6.0,
+      totalGetfund: 5.0,
+      totalVat: 25.0,
+      totalTax: 36.0,
+      vatRate: 12.5,
+      nhilRate: 3.0,
+      getfundRate: 2.5,
+      total: 236.0,
+    };
+
+    const html = buildReceiptHtml(customVatReceipt, business);
+
+    expect(html).toContain("TIN:");
+    expect(html).toContain("C9988776655");
+    expect(html).toContain("NHIL (3%):");
+    expect(html).toContain("GETFund (2.5%):");
+    expect(html).toContain("VAT (12.5%):");
+    expect(html).toContain("Total Tax (Act 1151):");
+    expect(html).toContain(formatCurrency(36));
+    expect(html).toContain(formatCurrency(236));
+  });
 });
 
 describe("forgiveCustomerDebt RPC service", () => {

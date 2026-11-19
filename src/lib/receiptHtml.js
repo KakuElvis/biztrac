@@ -80,6 +80,10 @@ export function buildReceiptHtml(receipt, business) {
     receipt.amountTendered !== undefined &&
     receipt.amountTendered >= receipt.total;
 
+  const vatRate = receipt.vatRate !== undefined ? receipt.vatRate : (business?.vat_rate ?? 15);
+  const nhilRate = receipt.nhilRate !== undefined ? receipt.nhilRate : (business?.nhil_rate ?? 2.5);
+  const getfundRate = receipt.getfundRate !== undefined ? receipt.getfundRate : (business?.getfund_rate ?? 2.5);
+
   return `
     <!doctype html>
     <html>
@@ -164,6 +168,7 @@ export function buildReceiptHtml(receipt, business) {
           <section class="meta">
             <div><span>Receipt:</span><strong>${escapeHtml(receipt.reference || "Draft")}</strong></div>
             <div><span>Date:</span><strong>${escapeHtml(formatReceiptDate(receipt.createdAt || new Date().toISOString()))}</strong></div>
+            ${receipt.tinNumber || business?.tin_number ? `<div><span>TIN:</span><strong>${escapeHtml(receipt.tinNumber || business.tin_number)}</strong></div>` : ""}
             ${receipt.cashierName ? `<div><span>Cashier:</span><strong>${escapeHtml(receipt.cashierName)}</strong></div>` : ""}
             <div><span>Customer:</span><strong>${escapeHtml(receipt.customerName || "Walk-in")}</strong></div>
             <div><span>Payment:</span><strong>${escapeHtml(receipt.paymentType || "Cash")}</strong></div>
@@ -171,6 +176,25 @@ export function buildReceiptHtml(receipt, business) {
             ${receipt.dueDate ? `<div><span>Due Date:</span><strong>${escapeHtml(formatReceiptDate(receipt.dueDate))}</strong></div>` : ""}
           </section>
           <table><tbody>${rows}</tbody></table>
+          ${receipt.totalTax > 0 ? `
+            <div style="border-top: 1px dashed #000; margin-top: 6px; padding-top: 4px;">
+              <div class="sub-row">
+                <span>Net Subtotal:</span><span>${escapeHtml(formatCurrency(receipt.subtotalExTax ?? (receipt.total - receipt.totalTax)))}</span>
+              </div>
+              <div class="sub-row">
+                <span>NHIL (${nhilRate}%):</span><span>${escapeHtml(formatCurrency(receipt.totalNhil || 0))}</span>
+              </div>
+              <div class="sub-row">
+                <span>GETFund (${getfundRate}%):</span><span>${escapeHtml(formatCurrency(receipt.totalGetfund || 0))}</span>
+              </div>
+              <div class="sub-row">
+                <span>VAT (${vatRate}%):</span><span>${escapeHtml(formatCurrency(receipt.totalVat || 0))}</span>
+              </div>
+              <div class="sub-row" style="font-weight: bold;">
+                <span>Total Tax (Act 1151):</span><span>${escapeHtml(formatCurrency(receipt.totalTax))}</span>
+              </div>
+            </div>
+          ` : ""}
           <div class="total"><span>TOTAL:</span><span>${escapeHtml(formatCurrency(receipt.total || 0))}</span></div>
           ${hasCashChange ? `
             <div class="sub-row">

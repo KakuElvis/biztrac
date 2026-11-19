@@ -114,6 +114,12 @@ export function useAuthSession() {
         return_policy: "Goods sold in good condition are not returnable after 3 days.",
         receipt_width: "58mm",
         receipt_footer: "Thank you for your patronage! Visit again.",
+        vat_enabled: false,
+        tin_number: "",
+        tax_pricing_mode: "exclusive",
+        vat_rate: 15.0,
+        nhil_rate: 2.5,
+        getfund_rate: 2.5,
       };
     }
 

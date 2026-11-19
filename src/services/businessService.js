@@ -53,6 +53,12 @@ export function toBusiness(row) {
     auto_print_receipt: Boolean(
       row.auto_print_receipt ?? local.auto_print_receipt ?? false
     ),
+    vat_enabled: Boolean(row.vat_enabled ?? local.vat_enabled ?? false),
+    tin_number: row.tin_number ?? local.tin_number ?? "",
+    tax_pricing_mode: row.tax_pricing_mode ?? local.tax_pricing_mode ?? "exclusive",
+    vat_rate: Number(row.vat_rate ?? local.vat_rate ?? 15.0),
+    nhil_rate: Number(row.nhil_rate ?? local.nhil_rate ?? 2.5),
+    getfund_rate: Number(row.getfund_rate ?? local.getfund_rate ?? 2.5),
   };
 }
 
@@ -67,6 +73,12 @@ export async function updateBusiness(businessId, business) {
     receipt_footer: business.receipt_footer !== undefined ? business.receipt_footer.trim() : undefined,
     auto_print_receipt:
       business.auto_print_receipt !== undefined ? Boolean(business.auto_print_receipt) : undefined,
+    vat_enabled: business.vat_enabled !== undefined ? Boolean(business.vat_enabled) : undefined,
+    tin_number: business.tin_number !== undefined ? String(business.tin_number).trim() : undefined,
+    tax_pricing_mode: business.tax_pricing_mode || undefined,
+    vat_rate: business.vat_rate !== undefined ? Number(business.vat_rate) : undefined,
+    nhil_rate: business.nhil_rate !== undefined ? Number(business.nhil_rate) : undefined,
+    getfund_rate: business.getfund_rate !== undefined ? Number(business.getfund_rate) : undefined,
   };
 
   // Clean undefined properties

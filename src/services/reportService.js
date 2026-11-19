@@ -141,6 +141,11 @@ export const emptyReportSummary = {
   salesTotal: 0,
   expenseTotal: 0,
   profitTotal: 0,
+  subtotalExTaxTotal: 0,
+  nhilTotal: 0,
+  getfundTotal: 0,
+  vatTotal: 0,
+  taxTotal: 0,
   bestSellers: [],
   debtors: [],
 };
@@ -159,7 +164,7 @@ export async function getReportSummary(businessId, { range = "weekly", startDate
   const [salesResult, expensesResult, debtorBalancesResult] = await Promise.all([
     client
       .from("sales")
-      .select("id, reference, customer_id, total, amount_paid, sold_at")
+      .select("id, reference, customer_id, total, amount_paid, sold_at, subtotal_ex_tax, total_nhil, total_getfund, total_vat, total_tax")
       .eq("business_id", businessId)
       .gte("sold_at", start.toISOString())
       .lt("sold_at", end.toISOString()),
@@ -179,9 +184,20 @@ export async function getReportSummary(businessId, { range = "weekly", startDate
   if (salesResult.error) throw salesResult.error;
   if (expensesResult.error) throw expensesResult.error;
 
+  let subtotalExTaxTotal = 0;
+  let nhilTotal = 0;
+  let getfundTotal = 0;
+  let vatTotal = 0;
+  let taxTotal = 0;
+
   salesResult.data.forEach((sale) => {
     const point = seriesByDate.get(getDateKey(new Date(sale.sold_at)));
     if (point) point.sales += toNumber(sale.total);
+    subtotalExTaxTotal += toNumber(sale.subtotal_ex_tax);
+    nhilTotal += toNumber(sale.total_nhil);
+    getfundTotal += toNumber(sale.total_getfund);
+    vatTotal += toNumber(sale.total_vat);
+    taxTotal += toNumber(sale.total_tax);
   });
 
   expensesResult.data.forEach((expense) => {
@@ -265,6 +281,11 @@ export async function getReportSummary(businessId, { range = "weekly", startDate
     salesTotal,
     expenseTotal,
     profitTotal: salesTotal - expenseTotal,
+    subtotalExTaxTotal,
+    nhilTotal,
+    getfundTotal,
+    vatTotal,
+    taxTotal,
     bestSellers: summarizeBestSellers(saleItemsResult.data),
     debtors,
   };

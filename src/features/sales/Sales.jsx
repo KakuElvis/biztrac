@@ -27,6 +27,7 @@ import { Button } from "../../components/common/Button.jsx";
 import { formatCurrency } from "../../lib/formatters.js";
 import { formatReceiptDate, printThermalReceipt } from "../../lib/receiptHtml.js";
 import { showToast } from "../../lib/toast.js";
+import { calculateSaleTaxes } from "../../lib/taxCalculator.js";
 import {
   enqueueOfflineSale,
   getQueuedSales,
@@ -36,13 +37,19 @@ import {
 const paymentTypes = ["Cash", "MoMo", "Bank", "Credit"];
 
 function toReceiptLine(line) {
-  const qty = Number(line.quantity) || 0;
+  const qty = Number(line.quantityNum ?? line.quantity) || 0;
   return {
     productId: line.productId,
     name: line.product.name,
     quantity: qty,
     unitPrice: line.product.sellingPrice,
-    total: line.total,
+    total: line.lineTotal ?? line.total,
+    taxTreatment: line.treatment || line.taxTreatment || line.product?.taxTreatment || "standard",
+    taxableAmount: line.taxableAmount,
+    vatAmount: line.vatAmount,
+    nhilAmount: line.nhilAmount,
+    getfundAmount: line.getfundAmount,
+    totalTax: line.totalTax,
   };
 }
 
@@ -73,10 +80,17 @@ function buildReceiptText(receipt, business) {
     receipt.amountTendered !== undefined &&
     receipt.amountTendered >= receipt.total;
 
+  const tin = receipt.tinNumber || business?.tin_number;
+  const hasTax = Boolean(receipt.totalTax && receipt.totalTax > 0);
+  const vatRate = receipt.vatRate !== undefined ? receipt.vatRate : (business?.vat_rate ?? 15);
+  const nhilRate = receipt.nhilRate !== undefined ? receipt.nhilRate : (business?.nhil_rate ?? 2.5);
+  const getfundRate = receipt.getfundRate !== undefined ? receipt.getfundRate : (business?.getfund_rate ?? 2.5);
+
   return [
     businessName,
     business?.slogan || "",
     businessDetails,
+    tin ? `TIN: ${tin}` : "",
     business?.momo_details ? `MoMo: ${business.momo_details}` : "",
     "",
     `Receipt: ${receipt.reference || "Draft"}`,
@@ -89,6 +103,11 @@ function buildReceiptText(receipt, business) {
     "",
     lines,
     "",
+    hasTax ? `Net Subtotal (ex-tax): ${formatCurrency(receipt.subtotalExTax ?? (receipt.total - receipt.totalTax))}` : "",
+    hasTax ? `NHIL (${nhilRate}%): ${formatCurrency(receipt.totalNhil || 0)}` : "",
+    hasTax ? `GETFund (${getfundRate}%): ${formatCurrency(receipt.totalGetfund || 0)}` : "",
+    hasTax ? `VAT (${vatRate}%): ${formatCurrency(receipt.totalVat || 0)}` : "",
+    hasTax ? `Total Tax (Act 1151): ${formatCurrency(receipt.totalTax)}` : "",
     `Total: ${formatCurrency(receipt.total || 0)}`,
     hasCashChange ? `Cash Tendered: ${formatCurrency(receipt.amountTendered)}` : "",
     hasCashChange && receipt.changeDue !== undefined ? `Change: ${formatCurrency(receipt.changeDue)}` : "",
@@ -131,14 +150,22 @@ function buildWhatsAppReceiptText(receipt, business) {
     receipt.amountTendered !== undefined &&
     receipt.amountTendered >= receipt.total;
 
+  const tin = receipt.tinNumber || business?.tin_number;
+  const hasTax = Boolean(receipt.totalTax && receipt.totalTax > 0);
+  const vatRate = receipt.vatRate !== undefined ? receipt.vatRate : (business?.vat_rate ?? 15);
+  const nhilRate = receipt.nhilRate !== undefined ? receipt.nhilRate : (business?.nhil_rate ?? 2.5);
+  const getfundRate = receipt.getfundRate !== undefined ? receipt.getfundRate : (business?.getfund_rate ?? 2.5);
+
   const lines = [
     `🧾 *RECEIPT - ${businessName.toUpperCase()}*`,
     business?.slogan ? `✨ _${business.slogan}_` : "",
     businessDetails ? `📍 ${businessDetails}` : "",
+    tin ? `📋 *TIN:* ${tin}` : "",
     business?.momo_details ? `📱 *${business.momo_details}*` : "",
     `--------------------------------`,
     `🔢 *Ref:* ${receipt.reference || "Draft"}`,
     `📅 *Date:* ${formatReceiptDate(receipt.createdAt || new Date().toISOString())}`,
+    receipt.cashierName ? `🧑‍💼 *Cashier:* ${receipt.cashierName}` : "",
     `👤 *Customer:* ${receipt.customerName || "Walk-in"}`,
     `💳 *Payment:* ${receipt.paymentType || "Cash"}`,
     receipt.paymentAccount ? `${receipt.paymentType === "Bank" ? "🏦" : "📱"} *Account / Ref:* ${receipt.paymentAccount}` : "",
@@ -147,8 +174,17 @@ function buildWhatsAppReceiptText(receipt, business) {
     `*ITEMS:*`,
     lineItems,
     `--------------------------------`,
-    `💰 *TOTAL:* ${formatCurrency(receipt.total)}`,
   ];
+
+  if (hasTax) {
+    lines.push(`Net Subtotal: ${formatCurrency(receipt.subtotalExTax ?? (receipt.total - receipt.totalTax))}`);
+    lines.push(`NHIL (${nhilRate}%): ${formatCurrency(receipt.totalNhil || 0)}`);
+    lines.push(`GETFund (${getfundRate}%): ${formatCurrency(receipt.totalGetfund || 0)}`);
+    lines.push(`VAT (${vatRate}%): ${formatCurrency(receipt.totalVat || 0)}`);
+    lines.push(`Total Tax (Act 1151): ${formatCurrency(receipt.totalTax)}`);
+  }
+
+  lines.push(`💰 *TOTAL:* ${formatCurrency(receipt.total)}`);
 
   if (hasCashChange) {
     lines.push(`💵 *Cash Tendered:* ${formatCurrency(receipt.amountTendered)}`);
@@ -387,10 +423,24 @@ export function Sales({
     .map((line) => {
       const product = products.find((item) => item.id === line.productId);
       const qtyNum = line.quantity === "" ? 0 : Number(line.quantity) || 0;
-      return product ? { ...line, quantity: line.quantity, quantityNum: qtyNum, product, total: qtyNum * product.sellingPrice } : null;
+      return product
+        ? {
+            ...line,
+            quantity: line.quantity,
+            quantityNum: qtyNum,
+            product,
+            total: qtyNum * product.sellingPrice,
+            taxTreatment: product.taxTreatment || "standard",
+          }
+        : null;
     })
     .filter(Boolean);
-  const total = cartLines.reduce((sum, line) => sum + line.total, 0);
+
+  const taxSummary = useMemo(() => {
+    return calculateSaleTaxes(cartLines, business);
+  }, [cartLines, business]);
+
+  const total = taxSummary.grandTotal;
   const profit = cartLines.reduce(
     (sum, line) => sum + (line.product.sellingPrice - line.product.costPrice) * (line.quantityNum || 0),
     0
@@ -421,7 +471,7 @@ export function Sales({
         reference: "Draft receipt",
         customerName: getCustomerName(),
         cashierName,
-        lines: cartLines.map(toReceiptLine),
+        lines: taxSummary.lines.map(toReceiptLine),
         paymentType,
         total,
         profit,
@@ -430,6 +480,17 @@ export function Sales({
         dueDate: paymentType === "Credit" ? dueDate : null,
         amountTendered: hasCashChange ? tenderedNum : undefined,
         changeDue: hasCashChange ? changeDue : undefined,
+        tinNumber: business?.tin_number,
+        vatEnabled: Boolean(business?.vat_enabled),
+        subtotalExTax: taxSummary.subtotalExTax,
+        totalVat: taxSummary.totalVat,
+        totalNhil: taxSummary.totalNhil,
+        totalGetfund: taxSummary.totalGetfund,
+        totalTax: taxSummary.totalTax,
+        vatRate: taxSummary.vatRate,
+        nhilRate: taxSummary.nhilRate,
+        getfundRate: taxSummary.getfundRate,
+        combinedRate: taxSummary.combinedRate,
       }
     : lastReceipt;
 
@@ -665,7 +726,7 @@ export function Sales({
         reference: sale.reference,
         customerName: getCustomerName(),
         cashierName,
-        lines: cartLines.map(toReceiptLine),
+        lines: taxSummary.lines.map(toReceiptLine),
         paymentType,
         total,
         profit,
@@ -675,6 +736,17 @@ export function Sales({
         amountTendered: hasCashChange ? tenderedNum : undefined,
         changeDue: hasCashChange ? changeDue : undefined,
         createdAt: new Date().toISOString(),
+        tinNumber: sale.tinSnapshot || business?.tin_number,
+        vatEnabled: Boolean(business?.vat_enabled),
+        subtotalExTax: sale.subtotalExTax ?? taxSummary.subtotalExTax,
+        totalVat: sale.totalVat ?? taxSummary.totalVat,
+        totalNhil: sale.totalNhil ?? taxSummary.totalNhil,
+        totalGetfund: sale.totalGetfund ?? taxSummary.totalGetfund,
+        totalTax: sale.totalTax ?? taxSummary.totalTax,
+        vatRate: taxSummary.vatRate,
+        nhilRate: taxSummary.nhilRate,
+        getfundRate: taxSummary.getfundRate,
+        combinedRate: taxSummary.combinedRate,
       };
 
       setLastReceipt(receipt);
@@ -717,7 +789,7 @@ export function Sales({
             reference: `OFFLINE-${createdAt.replace(/[:.]/g, "-")}`,
             customerName: getCustomerName(),
             cashierName,
-            lines: cartLines.map(toReceiptLine),
+            lines: taxSummary.lines.map(toReceiptLine),
             paymentType,
             total,
             profit,
@@ -727,6 +799,17 @@ export function Sales({
             amountTendered: hasCashChange ? tenderedNum : undefined,
             changeDue: hasCashChange ? changeDue : undefined,
             createdAt,
+            tinNumber: business?.tin_number,
+            vatEnabled: Boolean(business?.vat_enabled),
+            subtotalExTax: taxSummary.subtotalExTax,
+            totalVat: taxSummary.totalVat,
+            totalNhil: taxSummary.totalNhil,
+            totalGetfund: taxSummary.totalGetfund,
+            totalTax: taxSummary.totalTax,
+            vatRate: taxSummary.vatRate,
+            nhilRate: taxSummary.nhilRate,
+            getfundRate: taxSummary.getfundRate,
+            combinedRate: taxSummary.combinedRate,
           };
           setLastReceipt(draftReceipt);
           setCart([]);
@@ -1670,6 +1753,10 @@ export function Sales({
 function ReceiptPreview({ business, receipt, canViewProfit = true }) {
   const businessName = business?.name || "BizTrac";
   const lines = receipt?.lines || [];
+  const tin = receipt?.tinNumber || business?.tin_number;
+  const vatRate = receipt?.vatRate !== undefined ? receipt.vatRate : (business?.vat_rate ?? 15);
+  const nhilRate = receipt?.nhilRate !== undefined ? receipt.nhilRate : (business?.nhil_rate ?? 2.5);
+  const getfundRate = receipt?.getfundRate !== undefined ? receipt.getfundRate : (business?.getfund_rate ?? 2.5);
 
   return (
     <div className="panel overflow-hidden">
@@ -1684,6 +1771,12 @@ function ReceiptPreview({ business, receipt, canViewProfit = true }) {
           <span>{receipt?.reference || "Draft receipt"}</span>
           <span>{receipt?.paymentType || "Cash"}</span>
         </div>
+        {tin ? (
+          <div className="mt-1 flex items-center justify-between text-xs font-semibold text-slate-600">
+            <span>TIN:</span>
+            <span className="font-bold text-ink">{tin}</span>
+          </div>
+        ) : null}
         {receipt?.cashierName ? (
           <div className="mt-1.5 flex items-center justify-between text-xs font-semibold text-slate-600">
             <span>Cashier:</span>
@@ -1719,6 +1812,30 @@ function ReceiptPreview({ business, receipt, canViewProfit = true }) {
               <span>{formatCurrency(receipt?.profit || 0)}</span>
             </div>
           )}
+          {receipt?.totalTax > 0 ? (
+            <div className="rounded-xl bg-slate-50 p-2.5 space-y-1 text-xs mb-2">
+              <div className="flex justify-between text-slate-500">
+                <span>Net Subtotal (ex-tax):</span>
+                <span>{formatCurrency(receipt.subtotalExTax ?? (receipt.total - receipt.totalTax))}</span>
+              </div>
+              <div className="flex justify-between text-slate-500">
+                <span>NHIL ({nhilRate}%):</span>
+                <span>{formatCurrency(receipt.totalNhil || 0)}</span>
+              </div>
+              <div className="flex justify-between text-slate-500">
+                <span>GETFund ({getfundRate}%):</span>
+                <span>{formatCurrency(receipt.totalGetfund || 0)}</span>
+              </div>
+              <div className="flex justify-between text-slate-500">
+                <span>VAT ({vatRate}%):</span>
+                <span>{formatCurrency(receipt.totalVat || 0)}</span>
+              </div>
+              <div className="flex justify-between font-bold text-emerald-800 border-t border-slate-200/60 pt-1">
+                <span>Total Tax (Act 1151):</span>
+                <span>{formatCurrency(receipt.totalTax)}</span>
+              </div>
+            </div>
+          ) : null}
           <div className="flex justify-between text-xl font-black text-ink">
             <span>Total</span>
             <span>{formatCurrency(receipt?.total || 0)}</span>

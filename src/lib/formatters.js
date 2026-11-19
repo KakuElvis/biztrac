@@ -1,7 +1,8 @@
 export const currency = new Intl.NumberFormat("en-GH", {
   style: "currency",
   currency: "GHS",
-  maximumFractionDigits: 0,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 });
 
 export const compactCurrency = new Intl.NumberFormat("en-GH", {

@@ -1,6 +1,7 @@
 import { isSupabaseConfigured } from "../lib/supabase.js";
 import { requireSupabase } from "./serviceUtils.js";
 import { normalizeRole, ROLES } from "../features/staff/permissions.js";
+import { toBusiness } from "./businessService.js";
 
 const LOCAL_STAFF_STORAGE_KEY = "biztrac_local_staff_v1";
 const GLOBAL_STAFF_REGISTRY_KEY = "biztrac_staff_registry_v1";
@@ -503,12 +504,13 @@ export async function loginWithStaffId({ staffId, password }) {
               },
               workspace: {
                 role: normalizeRole(staff.role),
-                business: biz || {
+                business: toBusiness(biz) || {
                   id: staff.business_id,
                   name: "BizTrac Store",
                   currency: "GHS",
                   location: "",
                   phone: "",
+                  vat_enabled: false,
                 },
               },
               isStaffSession: true,

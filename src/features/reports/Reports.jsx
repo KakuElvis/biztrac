@@ -103,6 +103,23 @@ function buildReportHtml(summary, business, periodLabel, startDate, endDate, low
           </div>
         </div>
 
+        ${summary.taxTotal > 0 || business?.vat_enabled ? `
+        <div class="section">
+          <h2>Tax Liabilities (Ghana Act 1151)</h2>
+          <table class="table">
+            <thead>
+              <tr><th>Tax Component</th><th>Statutory Rate</th><th>Amount Collected</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Net Taxable Sales</td><td>Ex-tax supply</td><td>${escapeHtml(formatCurrency(summary.subtotalExTaxTotal || (summary.salesTotal - (summary.taxTotal || 0))))}</td></tr>
+              <tr><td>NHIL</td><td>${business?.nhil_rate ?? 2.5}%</td><td>${escapeHtml(formatCurrency(summary.nhilTotal || 0))}</td></tr>
+              <tr><td>GETFund Levy</td><td>${business?.getfund_rate ?? 2.5}%</td><td>${escapeHtml(formatCurrency(summary.getfundTotal || 0))}</td></tr>
+              <tr><td>VAT</td><td>${business?.vat_rate ?? 15.0}%</td><td>${escapeHtml(formatCurrency(summary.vatTotal || 0))}</td></tr>
+              <tr style="font-weight: bold; background: #f8fafc;"><td>Total Tax Liabilities</td><td>${(((business?.vat_rate ?? 15) + (business?.nhil_rate ?? 2.5) + (business?.getfund_rate ?? 2.5))).toFixed(1)}% combined</td><td>${escapeHtml(formatCurrency(summary.taxTotal || 0))}</td></tr>
+            </tbody>
+          </table>
+        </div>` : ""}
+
         <div class="section">
           <h2>Best products</h2>
           <table class="table">
@@ -228,6 +245,21 @@ function buildReportCsv(summary, business, periodLabel, startDate, endDate, lowS
   lines.push(`"Expense Total","${summary.expenseTotal}"`);
   lines.push(`"Profit Total","${summary.profitTotal}"`);
   lines.push("");
+
+  if (summary.taxTotal > 0 || business?.vat_enabled) {
+    const vatR = business?.vat_rate ?? 15.0;
+    const nhilR = business?.nhil_rate ?? 2.5;
+    const getfundR = business?.getfund_rate ?? 2.5;
+    const combR = vatR + nhilR + getfundR;
+    lines.push(`"TAX & STATUTORY LEVIES (ACT 1151)"`);
+    lines.push(`"Component","Rate","Amount"`);
+    lines.push(`"Net Taxable Sales","Ex-tax","${Number(summary.subtotalExTaxTotal || (summary.salesTotal - (summary.taxTotal || 0))).toFixed(2)}"`);
+    lines.push(`"NHIL","${nhilR}%","${Number(summary.nhilTotal || 0).toFixed(2)}"`);
+    lines.push(`"GETFund Levy","${getfundR}%","${Number(summary.getfundTotal || 0).toFixed(2)}"`);
+    lines.push(`"VAT","${vatR}%","${Number(summary.vatTotal || 0).toFixed(2)}"`);
+    lines.push(`"Total Tax Liabilities","${combR.toFixed(1)}%","${Number(summary.taxTotal || 0).toFixed(2)}"`);
+    lines.push("");
+  }
 
   lines.push(`"DAILY BREAKDOWN"`);
   lines.push(`"Date / Day","Sales","Expenses"`);
@@ -634,6 +666,55 @@ export function Reports({
               isLoading={reportsLoading}
             />
           </section>
+
+          {(business?.vat_enabled || summary.taxTotal > 0) && (
+            <section className="panel p-5 bg-gradient-to-br from-emerald-50/50 to-white border-emerald-200/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800">
+                    Statutory Compliance
+                  </span>
+                  <h3 className="text-base font-black text-ink">Ghana Tax Breakdown (Act 1151)</h3>
+                </div>
+                <Badge variant="green">VAT Registered</Badge>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 pt-1">
+                <div className="rounded-2xl border border-emerald-100 bg-white p-3 shadow-xs">
+                  <p className="text-xs font-bold text-slate-500">Net Sales (Ex-Tax)</p>
+                  <p className="text-lg font-black text-ink mt-0.5">
+                    {formatCurrency(summary.subtotalExTaxTotal || (summary.salesTotal - (summary.taxTotal || 0)))}
+                  </p>
+                  <p className="text-[11px] font-medium text-slate-400">Taxable supply base</p>
+                </div>
+                <div className="rounded-2xl border border-emerald-100 bg-white p-3 shadow-xs">
+                  <p className="text-xs font-bold text-slate-500">VAT ({business?.vat_rate ?? 15.0}%)</p>
+                  <p className="text-lg font-black text-emerald-700 mt-0.5">
+                    {formatCurrency(summary.vatTotal || 0)}
+                  </p>
+                  <p className="text-[11px] font-medium text-slate-400">Value Added Tax</p>
+                </div>
+                <div className="rounded-2xl border border-emerald-100 bg-white p-3 shadow-xs">
+                  <p className="text-xs font-bold text-slate-500">
+                    Levies ({(((business?.nhil_rate ?? 2.5) + (business?.getfund_rate ?? 2.5))).toFixed(1)}%)
+                  </p>
+                  <p className="text-lg font-black text-emerald-700 mt-0.5">
+                    {formatCurrency((summary.nhilTotal || 0) + (summary.getfundTotal || 0))}
+                  </p>
+                  <p className="text-[11px] font-medium text-slate-400">
+                    NHIL: {formatCurrency(summary.nhilTotal || 0)} | GETF: {formatCurrency(summary.getfundTotal || 0)}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-600 p-3 text-white shadow-soft">
+                  <p className="text-xs font-bold text-emerald-100">Total Tax Liabilities</p>
+                  <p className="text-lg font-black text-white mt-0.5">
+                    {formatCurrency(summary.taxTotal || 0)}
+                  </p>
+                  <p className="text-[11px] font-medium text-emerald-200">Total GRA tax collected</p>
+                </div>
+              </div>
+            </section>
+          )}
 
           <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
             <div className="panel p-4 sm:p-5">

@@ -2,6 +2,7 @@
 -- Description: Allows counter cashiers to verify their Staff ID & password at the login screen.
 
 -- 1. Policy to allow counter login lookup for unauthenticated cashiers
+drop policy if exists "Allow staff login lookup" on public.staff_accounts;
 create policy "Allow staff login lookup"
 on public.staff_accounts for select
 to anon

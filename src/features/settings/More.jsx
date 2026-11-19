@@ -21,6 +21,7 @@ import {
   Eye,
   EyeOff,
   Lock,
+  Calculator,
 } from "lucide-react";
 import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
@@ -28,6 +29,7 @@ import { formatCurrency } from "../../lib/formatters.js";
 import { printThermalReceipt, sampleTestReceipt } from "../../lib/receiptHtml.js";
 import { showToast } from "../../lib/toast.js";
 import { StaffManagement } from "../staff/index.js";
+import { TaxSettingsModal } from "./TaxSettingsModal.jsx";
 
 const fallbackBusiness = {
   name: "BizTrac",
@@ -59,6 +61,12 @@ function toBusinessForm(business) {
     receipt_footer:
       business?.receipt_footer || "Thank you for your patronage! Visit again.",
     auto_print_receipt: Boolean(business?.auto_print_receipt),
+    vat_enabled: Boolean(business?.vat_enabled),
+    tin_number: business?.tin_number || "",
+    tax_pricing_mode: business?.tax_pricing_mode || "exclusive",
+    vat_rate: business?.vat_rate !== undefined ? business.vat_rate : 15.0,
+    nhil_rate: business?.nhil_rate !== undefined ? business.nhil_rate : 2.5,
+    getfund_rate: business?.getfund_rate !== undefined ? business.getfund_rate : 2.5,
   };
 }
 
@@ -87,6 +95,7 @@ export function More({
   const debtors = dashboardSummary?.debtors || [];
   const [form, setForm] = useState(() => toBusinessForm(business));
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
+  const [isTaxModalOpen, setIsTaxModalOpen] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSuccess, setProfileSuccess] = useState("");
@@ -108,6 +117,15 @@ export function More({
       setReceiptSuccess("");
     }
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function handleSaveTaxSettingsModal(nextTaxConfig) {
+    const updated = await onUpdateBusiness({
+      ...form,
+      ...nextTaxConfig,
+    });
+    setForm((current) => ({ ...current, ...nextTaxConfig }));
+    return updated;
   }
 
   async function handleSaveProfile(event) {
@@ -412,6 +430,18 @@ export function More({
                 note: "58mm & 80mm rolls, MoMo & footer",
                 onClick: () => {
                   document.getElementById("receipt-settings")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                },
+              },
+              {
+                label: "Ghana VAT & Tax Settings (Act 1151)",
+                icon: Calculator,
+                note: form.vat_enabled ? `Active (${form.tax_pricing_mode}) • Protected` : "Disabled (Non-VAT store) • Protected",
+                onClick: () => {
+                  if (canManageSettings) {
+                    setIsTaxModalOpen(true);
+                  } else {
+                    showToast("Access restricted: View only for Store Owner / Manager", { type: "warn" });
+                  }
                 },
               },
               { label: "Invoices", icon: FileText, note: "Drafts, sent, paid" },
@@ -722,7 +752,57 @@ export function More({
         </div>
       </section>
 
-      {/* Row 3: PWA Card & Sign out */}
+      {/* Row 3: Protected Ghana VAT & Tax Security Card */}
+      <section id="tax-settings" className="scroll-mt-6">
+        <div className="panel p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-l-4 border-l-amber-500">
+          <div className="flex items-start gap-3.5">
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-500/10 text-amber-600 shrink-0">
+              <Calculator className="h-6 w-6" />
+            </span>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base sm:text-lg font-black text-ink">
+                  Ghana VAT & Tax Configuration
+                </h2>
+                <Badge variant={form.vat_enabled ? "green" : "slate"}>
+                  {form.vat_enabled ? `Active (${((Number(form.vat_rate) || 0) + (Number(form.nhil_rate) || 0) + (Number(form.getfund_rate) || 0)).toFixed(1)}%)` : "Disabled"}
+                </Badge>
+                <span className="flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                  <Lock className="h-3 w-3 text-slate-500" />
+                  <span>Protected</span>
+                </span>
+              </div>
+              <p className="text-xs font-semibold text-slate-500 mt-1">
+                {form.vat_enabled
+                  ? `Configured in ${form.tax_pricing_mode === "inclusive" ? "Tax-Inclusive" : "Tax-Exclusive"} mode • TIN: ${form.tin_number || "Not set"}`
+                  : "Tax calculations and VAT lines are currently disabled for non-registered retail."}
+              </p>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Tax rates, statutory levies, and pricing modes are secured in a dedicated modal to prevent accidental modification.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              icon={canManageSettings ? Calculator : Lock}
+              type="button"
+              disabled={!canManageSettings}
+              onClick={() => {
+                if (canManageSettings) {
+                  setIsTaxModalOpen(true);
+                } else {
+                  showToast("Access restricted: View only for Store Owner / Manager", { type: "warn" });
+                }
+              }}
+            >
+              {canManageSettings ? "Manage VAT & Tax Settings" : "Restricted to Store Owner"}
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Row 4: PWA Card & Sign out */}
       <section className="grid gap-5 lg:grid-cols-2">
         <div className="panel p-4 sm:p-5 space-y-3">
           <div className="flex items-center justify-between">
@@ -785,6 +865,14 @@ export function More({
         onSetPreviewRole={onSetPreviewRole}
         isOpen={isStaffModalOpen}
         onClose={() => setIsStaffModalOpen(false)}
+      />
+
+      <TaxSettingsModal
+        isOpen={isTaxModalOpen}
+        onClose={() => setIsTaxModalOpen(false)}
+        business={{ ...business, ...form }}
+        canManageSettings={canManageSettings}
+        onSaveTaxSettings={handleSaveTaxSettingsModal}
       />
     </div>
   );

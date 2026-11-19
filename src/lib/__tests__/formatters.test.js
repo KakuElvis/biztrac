@@ -3,9 +3,13 @@ import { formatCurrency } from "../formatters.js";
 import { shortReference, formatPaymentMethod } from "../../services/serviceUtils.js";
 
 describe("Service Utils & Formatters", () => {
-  it("formats numbers to currency string", () => {
+  it("formats numbers to currency string and preserves 2 decimal places for VAT and pesewas", () => {
     const formatted = formatCurrency(1500.5);
-    expect(formatted).toMatch(/1,501|1,500|GHS|GH₵/);
+    expect(formatted).toMatch(/1,500\.50/);
+    expect(formatted).toMatch(/GHS|GH₵/);
+
+    const vatFormatted = formatCurrency(2.25);
+    expect(vatFormatted).toMatch(/2\.25/);
   });
 
   it("extracts short reference from row object", () => {

@@ -24,6 +24,7 @@ export function toProduct(row) {
     colour: row.colour || "",
     brand: row.brand || "",
     itemType: row.item_type || "",
+    taxTreatment: row.tax_treatment || "standard",
   };
 }
 
@@ -41,6 +42,7 @@ function toProductRow(product) {
     colour: product.colour.trim() || null,
     brand: product.brand.trim() || null,
     item_type: product.itemType.trim() || null,
+    tax_treatment: product.taxTreatment || "standard",
   };
 }
 

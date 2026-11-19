@@ -41,6 +41,13 @@ function toSale(row) {
     amountPaid: toNumber(row.amount_paid),
     dueDate: row.due_date || null,
     soldAt: row.sold_at,
+    subtotalExTax: toNumber(row.subtotal_ex_tax),
+    totalNhil: toNumber(row.total_nhil),
+    totalGetfund: toNumber(row.total_getfund),
+    totalVat: toNumber(row.total_vat),
+    totalTax: toNumber(row.total_tax),
+    tinSnapshot: row.tin_snapshot || "",
+    taxModeSnapshot: row.tax_mode_snapshot || "",
   };
 }
 
