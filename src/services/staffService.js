@@ -8,6 +8,30 @@ const GLOBAL_STAFF_REGISTRY_KEY = "biztrac_staff_registry_v1";
 const ACTIVE_STAFF_SESSION_KEY = "biztrac_active_staff_session_v1";
 const CACHED_BUSINESS_KEY = "biztrac_cached_business_v1";
 
+async function deriveLocalPin(password, salt) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: encoder.encode(salt), iterations: 210000, hash: "SHA-256" }, key, 256);
+  return Array.from(new Uint8Array(bits), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function createLocalPinVerifier(password) {
+  const salt = crypto.randomUUID();
+  return { pinSalt: salt, pinHash: await deriveLocalPin(password, salt) };
+}
+
+async function verifyLocalPin(password, salt, expectedHash) {
+  if (!salt || !expectedHash) return false;
+  const actual = await deriveLocalPin(password, salt);
+  return actual === expectedHash;
+}
+
+function withoutPlainPin(member) {
+  const safe = { ...member };
+  delete safe.password;
+  return safe;
+}
+
 /**
  * Generates an alphanumeric Staff ID in the format:
  * 2 random capital letters followed by 3 random digits (e.g. AF190).
@@ -110,11 +134,19 @@ export async function listStaffMembers(businessId, currentUser = null) {
   if (!isSupabaseConfigured) {
     const cached = readLocalStaff(businessId);
     if (cached.length) {
-      // Ensure each member has a staffId
-      const normalized = cached.map((m) => ({
-        ...m,
-        staffId: m.staffId || (m.role === ROLES.OWNER ? "OWNER" : generateStaffId()),
-      }));
+      // Ensure each member has a staffId and current lock status
+      const normalized = cached.map((m) => {
+        const isLocked = Boolean(m.lockedUntil && new Date(m.lockedUntil).getTime() > Date.now());
+        const remainingMinutes = isLocked
+          ? Math.max(1, Math.ceil((new Date(m.lockedUntil).getTime() - Date.now()) / 60000))
+          : 0;
+        return {
+          ...m,
+          staffId: m.staffId || (m.role === ROLES.OWNER ? "OWNER" : generateStaffId()),
+          isLocked,
+          remainingMinutes,
+        };
+      });
       return normalized;
     }
     const fallback = getFallbackStaff(businessId, currentUser);
@@ -172,7 +204,9 @@ export async function listStaffMembers(businessId, currentUser = null) {
         phone: profile?.phone || "",
         email: isCurrent ? currentUser?.email : "",
         staffId: cachedItem?.staffId || (isCurrent ? "OWNER" : generateStaffId()),
-        password: cachedItem?.password || "",
+        password: "",
+        pinSalt: cachedItem?.pinSalt,
+        pinHash: cachedItem?.pinHash,
         isCurrent,
       };
     });
@@ -181,12 +215,16 @@ export async function listStaffMembers(businessId, currentUser = null) {
     try {
       const { data: cloudStaff, error: csError } = await client
         .from("staff_accounts")
-        .select("id, business_id, staff_id, password_hash, full_name, phone, email, role, created_at")
+        .select("id, business_id, staff_id, password_hash, full_name, phone, email, role, created_at, failed_login_attempts, locked_until")
         .eq("business_id", businessId);
 
       if (!csError && Array.isArray(cloudStaff)) {
         cloudStaff.forEach((cs) => {
           if (!result.some((r) => r.staffId === cs.staff_id || r.id === cs.id)) {
+            const isLocked = Boolean(cs.locked_until && new Date(cs.locked_until).getTime() > Date.now());
+            const remainingMinutes = isLocked
+              ? Math.max(1, Math.ceil((new Date(cs.locked_until).getTime() - Date.now()) / 60000))
+              : 0;
             result.push({
               id: cs.id,
               businessId: cs.business_id,
@@ -196,7 +234,11 @@ export async function listStaffMembers(businessId, currentUser = null) {
               phone: cs.phone || "",
               email: cs.email || "",
               staffId: cs.staff_id,
-              password: cs.password_hash || "",
+              password: "",
+              failedAttempts: cs.failed_login_attempts || 0,
+              lockedUntil: cs.locked_until || null,
+              isLocked,
+              remainingMinutes,
               isCurrent: false,
             });
           }
@@ -211,7 +253,15 @@ export async function listStaffMembers(businessId, currentUser = null) {
   } catch (error) {
     console.warn("[staffService] Error querying business_members, using cached:", error?.message || error);
     const cached = readLocalStaff(businessId);
-    if (cached.length) return cached;
+    if (cached.length) {
+      return cached.map((m) => {
+        const isLocked = Boolean(m.lockedUntil && new Date(m.lockedUntil).getTime() > Date.now());
+        const remainingMinutes = isLocked
+          ? Math.max(1, Math.ceil((new Date(m.lockedUntil).getTime() - Date.now()) / 60000))
+          : 0;
+        return { ...m, isLocked, remainingMinutes };
+      });
+    }
     return getFallbackStaff(businessId, currentUser);
   }
 }
@@ -261,7 +311,7 @@ export async function updateStaffRole(businessId, userId, newRole) {
 }
 
 /**
- * Updates a staff member's password
+ * Updates a staff member's password using pgcrypto hashing RPC or table trigger
  */
 export async function updateStaffPassword(businessId, userId, newPassword) {
   const cleanPass = (newPassword || "").trim();
@@ -270,26 +320,122 @@ export async function updateStaffPassword(businessId, userId, newPassword) {
   if (isSupabaseConfigured) {
     try {
       const client = requireSupabase();
-      await client
-        .from("staff_accounts")
-        .update({ password_hash: cleanPass })
-        .eq("business_id", businessId)
-        .eq("staff_id", userId);
+      let updatedRemotely = false;
+      try {
+        const { data: rpcRes, error: rpcErr } = await client.rpc("set_staff_password", {
+          p_business_id: businessId,
+          p_staff_id: userId,
+          p_new_password: cleanPass,
+        });
+        if (!rpcErr && rpcRes && rpcRes.success) {
+          updatedRemotely = true;
+        }
+      } catch (rpcErr) {
+        console.warn("[staffService] set_staff_password RPC failed, trying fallback:", rpcErr?.message || rpcErr);
+      }
+
+      if (!updatedRemotely) {
+        // Fallback: direct table update (the trg_hash_staff_password trigger hashes the password in PostgreSQL)
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+        let query = client
+          .from("staff_accounts")
+          .update({
+            password_hash: cleanPass,
+            failed_login_attempts: 0,
+            locked_until: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("business_id", businessId);
+
+        if (isUuid) {
+          query = query.or(`id.eq.${userId},staff_id.eq.${userId}`);
+        } else {
+          query = query.eq("staff_id", userId);
+        }
+        await query;
+      }
     } catch (err) {
       console.warn("[staffService] Failed remote password update:", err?.message || err);
     }
   }
 
+  const pinVerifier = await createLocalPinVerifier(cleanPass);
   const cached = readLocalStaff(businessId);
   const updated = cached.map((m) =>
-    m.id === userId || m.staffId === userId ? { ...m, password: cleanPass } : m
+    m.id === userId || m.staffId === userId
+      ? { ...withoutPlainPin(m), ...pinVerifier, failedAttempts: 0, lockedUntil: null, isLocked: false }
+      : m
   );
   writeLocalStaff(businessId, updated);
 
   const registry = readGlobalStaffRegistry();
   const updatedReg = registry.map((m) =>
     (m.businessId === businessId && (m.id === userId || m.staffId === userId))
-      ? { ...m, password: cleanPass }
+      ? { ...withoutPlainPin(m), ...pinVerifier, failedAttempts: 0, lockedUntil: null }
+      : m
+  );
+  writeGlobalStaffRegistry(updatedReg);
+
+  return { success: true };
+}
+
+/**
+ * Unlocks a locked staff account and resets failed login attempts.
+ */
+export async function unlockStaffAccount(businessId, userId) {
+  if (!businessId || !userId) throw new Error("Business ID and Staff ID are required.");
+
+  if (isSupabaseConfigured) {
+    try {
+      const client = requireSupabase();
+      let unlockedRemotely = false;
+      try {
+        const { data: rpcRes, error: rpcErr } = await client.rpc("unlock_staff_account", {
+          p_business_id: businessId,
+          p_staff_id: userId,
+        });
+        if (!rpcErr && rpcRes && rpcRes.success) {
+          unlockedRemotely = true;
+        }
+      } catch (rpcErr) {
+        console.warn("[staffService] unlock_staff_account RPC failed, trying fallback:", rpcErr?.message || rpcErr);
+      }
+
+      if (!unlockedRemotely) {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+        let query = client
+          .from("staff_accounts")
+          .update({
+            failed_login_attempts: 0,
+            locked_until: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("business_id", businessId);
+
+        if (isUuid) {
+          query = query.or(`id.eq.${userId},staff_id.eq.${userId}`);
+        } else {
+          query = query.eq("staff_id", userId);
+        }
+        await query;
+      }
+    } catch (err) {
+      console.warn("[staffService] Failed remote staff account unlock:", err?.message || err);
+    }
+  }
+
+  const cached = readLocalStaff(businessId);
+  const updated = cached.map((m) =>
+    m.id === userId || m.staffId === userId
+      ? { ...m, failedAttempts: 0, lockedUntil: null, isLocked: false }
+      : m
+  );
+  writeLocalStaff(businessId, updated);
+
+  const registry = readGlobalStaffRegistry();
+  const updatedReg = registry.map((m) =>
+    (m.businessId === businessId && (m.id === userId || m.staffId === userId))
+      ? { ...m, failedAttempts: 0, lockedUntil: null }
       : m
   );
   writeGlobalStaffRegistry(updatedReg);
@@ -357,6 +503,8 @@ export async function addStaffMember(
     cleanPassword = generateStaffPassword();
   }
 
+  const pinVerifier = await createLocalPinVerifier(cleanPassword);
+
   const newMember = {
     id: tempId,
     businessId,
@@ -373,7 +521,7 @@ export async function addStaffMember(
   // 1. Update business local staff cache
   const cached = readLocalStaff(businessId);
   const updated = [...cached, newMember];
-  writeLocalStaff(businessId, updated);
+  writeLocalStaff(businessId, updated.map((member) => member.id === tempId ? { ...withoutPlainPin(member), ...pinVerifier } : withoutPlainPin(member)));
 
   // 2. Register in global staff registry for login
   const registry = readGlobalStaffRegistry();
@@ -383,7 +531,7 @@ export async function addStaffMember(
   const regEntry = {
     id: tempId,
     staffId: cleanStaffId,
-    password: cleanPassword,
+    ...pinVerifier,
     fullName: newMember.fullName,
     role: normRole,
     phone: newMember.phone,
@@ -398,7 +546,7 @@ export async function addStaffMember(
   } else {
     registry.push(regEntry);
   }
-  writeGlobalStaffRegistry(registry);
+  writeGlobalStaffRegistry(registry.map(withoutPlainPin));
 
   // 3. Sync to Supabase staff_accounts table if online & configured
   if (isSupabaseConfigured) {
@@ -438,13 +586,93 @@ export async function loginWithStaffId({ staffId, password }) {
     throw new Error("Please enter your password.");
   }
 
-  // 1. Search in global staff registry
+  // 1. If online and Supabase is configured, authenticate via cryptographically secure authenticate_staff RPC
+  if (isSupabaseConfigured) {
+    try {
+      const client = requireSupabase();
+      // Never let a previous owner/admin Supabase token authorize a local staff session.
+      const { error: signOutError } = await client.auth.signOut({ scope: "local" });
+      if (signOutError) throw new Error("Could not safely switch to the staff account. Please sign out and try again.");
+      const { data: rpcResult, error: rpcError } = await client.rpc("authenticate_staff", {
+        p_staff_id: cleanId,
+        p_password: cleanPass,
+      });
+
+      if (!rpcError && rpcResult) {
+        if (rpcResult.success === false) {
+          throw new Error(rpcResult.error || "Staff login failed.");
+        }
+        if (rpcResult.success && rpcResult.staff) {
+          const staff = rpcResult.staff;
+          const biz = rpcResult.business;
+
+          const session = {
+            user: {
+              id: staff.id,
+              staffId: staff.staff_id,
+              fullName: staff.full_name,
+              role: normalizeRole(staff.role),
+              phone: staff.phone || "",
+              email: staff.email || `${staff.staff_id.toLowerCase()}@biztrac.staff`,
+              isStaff: true,
+              user_metadata: {
+                full_name: staff.full_name,
+                staff_id: staff.staff_id,
+                role: normalizeRole(staff.role),
+                is_staff_login: true,
+              },
+            },
+            workspace: {
+              role: normalizeRole(staff.role),
+              business: toBusiness(biz) || {
+                id: staff.business_id,
+                name: "BizTrac Store",
+                currency: "GHS",
+                location: "",
+                phone: "",
+                vat_enabled: false,
+              },
+            },
+            isStaffSession: true,
+            sessionToken: rpcResult.session_token || null,
+            expiresAt: rpcResult.expires_at ? new Date(rpcResult.expires_at).getTime() : Date.now() + 1000 * 60 * 60 * 14,
+          };
+
+          setActiveStaffSession(session);
+          if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+            try {
+              window.dispatchEvent(new CustomEvent("biztrac:auth-change", { detail: session }));
+            } catch {
+              // Ignore
+            }
+          }
+
+          return session;
+        }
+      }
+    } catch (rpcErr) {
+      if (rpcErr.message?.includes("Could not safely switch")) throw rpcErr;
+      if (
+        rpcErr.message &&
+        (rpcErr.message.includes("password") ||
+          rpcErr.message.includes("found") ||
+          rpcErr.message.includes("Staff ID") ||
+          rpcErr.message.includes("locked") ||
+          rpcErr.message.includes("attempt"))
+      ) {
+        throw rpcErr;
+      }
+      console.warn("[staffService] Remote authenticate_staff check failed, attempting local fallback:", rpcErr?.message || rpcErr);
+    }
+  }
+
+  // 2. Offline / Local fallback: Search in global staff registry
   let registry = readGlobalStaffRegistry();
   let foundMember = registry.find(
     (m) => (m.staffId || "").toUpperCase() === cleanId
   );
 
-  // 2. If not found in registry, search across any cached local staff keys
+  // 3. If not found in registry, search across any cached local staff keys
   if (!foundMember && typeof window !== "undefined") {
     try {
       for (let i = 0; i < localStorage.length; i++) {
@@ -466,108 +694,49 @@ export async function loginWithStaffId({ staffId, password }) {
     }
   }
 
-  // 3. If not found locally and Supabase is configured, search remote Supabase
-  if (!foundMember && isSupabaseConfigured) {
-    try {
-      const client = requireSupabase();
-
-      // 3A. Try secure RPC authenticate_staff if available
-      try {
-        const { data: rpcResult, error: rpcError } = await client.rpc("authenticate_staff", {
-          p_staff_id: cleanId,
-          p_password: cleanPass,
-        });
-
-        if (!rpcError && rpcResult) {
-          if (rpcResult.success === false) {
-            throw new Error(rpcResult.error || "Staff login failed.");
-          }
-          if (rpcResult.success && rpcResult.staff) {
-            const staff = rpcResult.staff;
-            const biz = rpcResult.business;
-
-            const session = {
-              user: {
-                id: staff.id,
-                staffId: staff.staff_id,
-                fullName: staff.full_name,
-                role: normalizeRole(staff.role),
-                phone: staff.phone || "",
-                email: staff.email || `${staff.staff_id.toLowerCase()}@biztrac.staff`,
-                isStaff: true,
-                user_metadata: {
-                  full_name: staff.full_name,
-                  staff_id: staff.staff_id,
-                  role: normalizeRole(staff.role),
-                  is_staff_login: true,
-                },
-              },
-              workspace: {
-                role: normalizeRole(staff.role),
-                business: toBusiness(biz) || {
-                  id: staff.business_id,
-                  name: "BizTrac Store",
-                  currency: "GHS",
-                  location: "",
-                  phone: "",
-                  vat_enabled: false,
-                },
-              },
-              isStaffSession: true,
-              expiresAt: Date.now() + 1000 * 60 * 60 * 24 * 7,
-            };
-
-            setActiveStaffSession(session);
-            if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
-              try {
-                window.dispatchEvent(new CustomEvent("biztrac:auth-change", { detail: session }));
-              } catch {
-                // Ignore
-              }
-            }
-
-            return session;
-          }
-        }
-      } catch (rpcErr) {
-        if (rpcErr.message && (rpcErr.message.includes("password") || rpcErr.message.includes("found"))) {
-          throw rpcErr;
-        }
-      }
-
-      // 3B. Fallback: Query staff_accounts table directly
-      const { data: remoteUser, error: rError } = await client
-        .from("staff_accounts")
-        .select("id, business_id, staff_id, password_hash, full_name, phone, email, role")
-        .ilike("staff_id", cleanId)
-        .maybeSingle();
-
-      if (!rError && remoteUser) {
-        foundMember = {
-          id: remoteUser.id,
-          businessId: remoteUser.business_id,
-          staffId: remoteUser.staff_id,
-          password: remoteUser.password_hash,
-          fullName: remoteUser.full_name,
-          phone: remoteUser.phone || "",
-          email: remoteUser.email || "",
-          role: remoteUser.role,
-        };
-      }
-    } catch (rErr) {
-      if (rErr.message && (rErr.message.includes("password") || rErr.message.includes("found"))) {
-        throw rErr;
-      }
-      console.warn("[staffService] Failed remote query for staff_id:", rErr?.message || rErr);
-    }
-  }
-
   if (!foundMember) {
     throw new Error(`Staff ID "${cleanId}" not found. Please verify with your store owner.`);
   }
 
-  if (foundMember.password && foundMember.password !== cleanPass) {
-    throw new Error("Incorrect password. Please try again.");
+  // Check if account is locked locally
+  if (foundMember.lockedUntil && new Date(foundMember.lockedUntil).getTime() > Date.now()) {
+    const remainingMin = Math.max(1, Math.ceil((new Date(foundMember.lockedUntil).getTime() - Date.now()) / 60000));
+    throw new Error(`Account is temporarily locked due to 5 consecutive failed PIN attempts. Try again in ${remainingMin} minute(s), or ask your store owner to unlock your account.`);
+  }
+
+  const pinMatches = foundMember.pinHash
+    ? await verifyLocalPin(cleanPass, foundMember.pinSalt, foundMember.pinHash)
+    : Boolean(foundMember.password && foundMember.password === cleanPass);
+  if (!pinMatches) {
+    const failed = (foundMember.failedAttempts || 0) + 1;
+    if (failed >= 5) {
+      foundMember.failedAttempts = failed;
+      foundMember.lockedUntil = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      writeGlobalStaffRegistry(registry);
+      throw new Error("Account locked: 5 consecutive failed PIN attempts. Try again in 15 minutes, or ask your store owner to unlock your account.");
+    } else {
+      foundMember.failedAttempts = failed;
+      writeGlobalStaffRegistry(registry);
+      throw new Error(`Incorrect password. ${5 - failed} attempt(s) remaining before temporary lockout.`);
+    }
+  }
+
+  if (foundMember.password && pinMatches) {
+    const pinVerifier = await createLocalPinVerifier(cleanPass);
+    Object.assign(foundMember, pinVerifier);
+    delete foundMember.password;
+    writeGlobalStaffRegistry(registry.map(withoutPlainPin));
+    const local = readLocalStaff(foundMember.businessId).map((member) =>
+      member.staffId === foundMember.staffId ? { ...withoutPlainPin(member), ...pinVerifier } : withoutPlainPin(member)
+    );
+    writeLocalStaff(foundMember.businessId, local);
+  }
+
+  // Password valid: reset failed attempts
+  if (foundMember.failedAttempts || foundMember.lockedUntil) {
+    foundMember.failedAttempts = 0;
+    foundMember.lockedUntil = null;
+    writeGlobalStaffRegistry(registry);
   }
 
   // 3. Resolve business details
@@ -615,6 +784,11 @@ export async function loginWithStaffId({ staffId, password }) {
   }
 
   return session;
+}
+
+export function getStaffSessionToken() {
+  const session = getActiveStaffSession();
+  return session?.sessionToken || null;
 }
 
 export function getActiveStaffSession() {

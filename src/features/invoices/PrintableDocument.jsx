@@ -1,4 +1,5 @@
 import { formatCurrency } from "../../lib/formatters.js";
+import { createPortal } from "react-dom";
 
 export function PrintableDocument({ doc, business = {} }) {
   const typeTitles = {
@@ -21,27 +22,32 @@ export function PrintableDocument({ doc, business = {} }) {
 
   const badgeClass = statusStyles[doc.status] || "border-slate-300 bg-slate-50 text-slate-700";
 
-  return (
+  const documentMarkup = (
     <div className="printable-document-root w-full flex justify-center py-2 sm:py-6 bg-slate-100 print:bg-white print:p-0">
       <style>{`
         @media print {
-          body * {
-            visibility: hidden;
+          body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
           }
-          #printable-invoice-sheet, #printable-invoice-sheet * {
-            visibility: visible;
-          }
+          body > * { display: none !important; }
+          body > .printable-document-root { display: block !important; }
+          .printable-document-root { position: static !important; }
           #printable-invoice-sheet {
-            position: absolute;
-            left: 0;
-            top: 0;
+            position: static !important;
             width: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
             padding: 24px !important;
             box-shadow: none !important;
             border: none !important;
+            page-break-after: auto;
           }
+          #printable-invoice-sheet tr { page-break-inside: avoid; }
+          #printable-invoice-sheet table { page-break-inside: auto; }
+          #printable-invoice-sheet thead { display: table-header-group; }
+          #printable-invoice-sheet .overflow-x-auto { overflow: visible !important; }
           .no-print {
             display: none !important;
           }
@@ -74,9 +80,9 @@ export function PrintableDocument({ doc, business = {} }) {
                 <p className="text-xs italic text-slate-500">{business.slogan}</p>
               )}
               <div className="text-xs text-slate-600 space-y-0.5 pt-1">
-                {business?.location && <p>📍 {business.location}</p>}
-                {business?.phone && <p>📞 {business.phone}</p>}
-                {business?.email && <p>✉️ {business.email}</p>}
+                {business?.location && <p><span className="font-semibold text-slate-700">Location:</span> {business.location}</p>}
+                {business?.phone && <p><span className="font-semibold text-slate-700">Tel:</span> {business.phone}</p>}
+                {business?.email && <p><span className="font-semibold text-slate-700">Email:</span> {business.email}</p>}
                 {business?.tin_number && (
                   <p className="font-semibold text-slate-800">
                     TIN: <span className="font-mono">{business.tin_number}</span>
@@ -137,10 +143,10 @@ export function PrintableDocument({ doc, business = {} }) {
                 Currency & Settlement
               </p>
               <p className="text-xs font-semibold text-slate-700">
-                Operating Currency: <strong>{currencyCode} (Ghana Cedi)</strong>
+                Operating Currency: <strong>{currencyCode}</strong>
               </p>
               <p className="text-xs text-slate-500">
-                All amounts are in Ghana Cedis and Pesewas.
+                All amounts are in {currencyCode}.
               </p>
             </div>
           </div>
@@ -267,4 +273,8 @@ export function PrintableDocument({ doc, business = {} }) {
       </div>
     </div>
   );
+
+  return typeof document === "undefined"
+    ? documentMarkup
+    : createPortal(documentMarkup, document.body);
 }

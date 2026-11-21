@@ -11,6 +11,9 @@ export function useInventory(repository, businessId) {
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [categoriesError, setCategoriesError] = useState("");
 
+  const [catalogProducts, setCatalogProducts] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [totalCount, setTotalCount] = useState(0);
@@ -65,6 +68,34 @@ export function useInventory(repository, businessId) {
   }, [businessId, repository, page, pageSize]);
 
   useEffect(() => {
+    let isMounted = true;
+    if (!businessId) {
+      setCatalogProducts([]);
+      return undefined;
+    }
+
+    setCatalogLoading(true);
+    repository
+      .listProducts(businessId, { omitCostPrice: true })
+      .then((res) => {
+        if (isMounted) {
+          const list = Array.isArray(res) ? res : res?.data || [];
+          setCatalogProducts(list);
+        }
+      })
+      .catch((err) => {
+        console.warn("[useInventory] Failed to load full counter catalog:", err);
+      })
+      .finally(() => {
+        if (isMounted) setCatalogLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [businessId, repository]);
+
+  useEffect(() => {
     if (!businessId || !supabase) return undefined;
 
     const channel = supabase
@@ -84,15 +115,23 @@ export function useInventory(repository, businessId) {
               if (current.some((item) => item.id === newProduct.id)) return current;
               return [newProduct, ...current].sort((a, b) => a.name.localeCompare(b.name));
             });
+            setCatalogProducts((current) => {
+              if (current.some((item) => item.id === newProduct.id)) return current;
+              return [newProduct, ...current].sort((a, b) => a.name.localeCompare(b.name));
+            });
             setTotalCount((c) => c + 1);
           } else if (payload.eventType === "UPDATE") {
             const updatedProduct = toProduct(payload.new);
             setProducts((current) =>
               current.map((item) => (item.id === updatedProduct.id ? updatedProduct : item))
             );
+            setCatalogProducts((current) =>
+              current.map((item) => (item.id === updatedProduct.id ? updatedProduct : item))
+            );
           } else if (payload.eventType === "DELETE") {
             const deletedId = payload.old.id;
             setProducts((current) => current.filter((item) => item.id !== deletedId));
+            setCatalogProducts((current) => current.filter((item) => item.id !== deletedId));
             setTotalCount((c) => Math.max(0, c - 1));
           }
         }
@@ -141,6 +180,7 @@ export function useInventory(repository, businessId) {
   const handleCreateProduct = async (product) => {
     const nextProduct = await repository.createProduct(businessId, product);
     setProducts((current) => [nextProduct, ...current]);
+    setCatalogProducts((current) => [nextProduct, ...current].sort((a, b) => a.name.localeCompare(b.name)));
     return nextProduct;
   };
 
@@ -149,12 +189,16 @@ export function useInventory(repository, businessId) {
     setProducts((current) =>
       current.map((item) => (item.id === productId ? nextProduct : item))
     );
+    setCatalogProducts((current) =>
+      current.map((item) => (item.id === productId ? nextProduct : item))
+    );
     return nextProduct;
   };
 
   const handleDeleteProduct = async (productId) => {
     await repository.deleteProduct(businessId, productId);
     setProducts((current) => current.filter((product) => product.id !== productId));
+    setCatalogProducts((current) => current.filter((product) => product.id !== productId));
   };
 
   const handleCreateCategory = async (name) => {
@@ -183,6 +227,22 @@ export function useInventory(repository, businessId) {
         return item;
       })
     );
+    setCatalogProducts((current) =>
+      current.map((item) => {
+        if (item.id === productId) {
+          const added = Number(restockData.quantityAdded);
+          const newCost = Number(restockData.newCostPrice);
+          const newSelling = Number(restockData.newSellingPrice);
+          return {
+            ...item,
+            quantity: item.quantity + added,
+            costPrice: !isNaN(newCost) && newCost > 0 ? newCost : item.costPrice,
+            sellingPrice: !isNaN(newSelling) && newSelling > 0 ? newSelling : item.sellingPrice,
+          };
+        }
+        return item;
+      })
+    );
     return res;
   };
 
@@ -192,6 +252,7 @@ export function useInventory(repository, businessId) {
 
   const resetInventory = () => {
     setProducts([]);
+    setCatalogProducts([]);
     setCategories([]);
     setTotalCount(0);
   };
@@ -201,6 +262,9 @@ export function useInventory(repository, businessId) {
     setProducts,
     productsLoading,
     productsError,
+    catalogProducts,
+    catalogLoading,
+    setCatalogProducts,
     categories,
     categoriesLoading,
     categoriesError,

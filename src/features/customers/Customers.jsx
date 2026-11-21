@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import { formatWhatsAppPhone } from "../../lib/formatters.js";
 import { useBackButtonModal } from "../../hooks/useBackButtonModal.js";
 import {
   UserPlus,
@@ -235,6 +236,7 @@ export function Customers({
   const [selectedCustomerForView, setSelectedCustomerForView] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsData, setDetailsData] = useState(null);
+  const [purchasePage, setPurchasePage] = useState(1);
   const [activeTab, setActiveTab] = useState("overview");
 
   // Edit Customer Form State inside Drawer
@@ -282,14 +284,19 @@ export function Customers({
     setEditNotes(selectedCustomerForView.notes || "");
     setEditError("");
     setActiveTab("overview");
+    if (purchasePage !== 1) setPurchasePage(1);
 
     let isMounted = true;
     setDetailsLoading(true);
 
     if (onFetchCustomerDetails) {
-      onFetchCustomerDetails(selectedCustomerForView.id)
+      onFetchCustomerDetails(selectedCustomerForView.id, { page: purchasePage, pageSize: 25 })
         .then((res) => {
-          if (isMounted) setDetailsData(res);
+          if (isMounted) {
+            setDetailsData((current) => purchasePage > 1 && current
+              ? { ...res, purchases: [...current.purchases, ...res.purchases] }
+              : res);
+          }
         })
         .catch((err) => {
           console.warn("Unable to load customer details", err);
@@ -324,7 +331,7 @@ export function Customers({
     return () => {
       isMounted = false;
     };
-  }, [selectedCustomerForView, onFetchCustomerDetails]);
+  }, [selectedCustomerForView, onFetchCustomerDetails, purchasePage]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -527,9 +534,7 @@ export function Customers({
 
   function handleSendWhatsApp(receipt) {
     const text = buildDebtWhatsAppText(receipt, business);
-    const phoneDigits = receipt.customerPhone
-      ? String(receipt.customerPhone).replace(/[^0-9]/g, "")
-      : "";
+    const phoneDigits = formatWhatsAppPhone(receipt.customerPhone);
     const url = phoneDigits
       ? `https://wa.me/${phoneDigits}?text=${encodeURIComponent(text)}`
       : `https://wa.me/?text=${encodeURIComponent(text)}`;
@@ -538,7 +543,7 @@ export function Customers({
 
   function handleSendCustomerStatement(customer, metrics, purchases) {
     const text = buildCustomerWhatsAppStatement(customer, metrics, purchases, business);
-    const phoneDigits = customer.phone ? String(customer.phone).replace(/[^0-9]/g, "") : "";
+    const phoneDigits = formatWhatsAppPhone(customer.phone);
     const url = phoneDigits
       ? `https://wa.me/${phoneDigits}?text=${encodeURIComponent(text)}`
       : `https://wa.me/?text=${encodeURIComponent(text)}`;
@@ -1111,6 +1116,7 @@ export function Customers({
                       </h4>
                       <span className="text-xs font-bold text-slate-400">
                         {detailsData?.purchases?.length || 0} transaction(s)
+                        {detailsData?.metrics?.totalOrders > 0 ? ` shown of ${detailsData.metrics.totalOrders}` : ""}
                       </span>
                     </div>
 
@@ -1179,6 +1185,16 @@ export function Customers({
                         No purchase transactions recorded yet for this customer.
                       </div>
                     )}
+                    {detailsData?.metrics?.hasMore ? (
+                      <button
+                        type="button"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-palm hover:bg-slate-50"
+                        disabled={detailsLoading}
+                        onClick={() => setPurchasePage((page) => page + 1)}
+                      >
+                        {detailsLoading ? "Loading…" : "Load older purchases"}
+                      </button>
+                    ) : null}
                   </div>
                 </>
               ) : (
@@ -1363,7 +1379,7 @@ export function Customers({
                   title="Send debt reminder via WhatsApp"
                   className="icon-button h-8 w-8 text-emerald-600 bg-emerald-50 border-emerald-200/80 hover:bg-emerald-100"
                   onClick={() => {
-                    const phoneDigits = String(c.phone).replace(/[^0-9]/g, "");
+                    const phoneDigits = formatWhatsAppPhone(c.phone);
                     const msg = `Hello ${c.name}, this is a friendly reminder from BizTrac regarding your outstanding balance of ${formatCurrency(c.debt)}. Kindly make payment at your earliest convenience. Thank you!`;
                     window.open(`https://wa.me/${phoneDigits}?text=${encodeURIComponent(msg)}`, "_blank");
                   }}

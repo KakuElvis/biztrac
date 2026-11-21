@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase.js";
+import { getActiveStaffSession, getStaffSessionToken } from "./staffService.js";
 
 function requireSupabase() {
   if (!supabase) {
@@ -15,7 +16,9 @@ export function toProduct(row) {
     name: row.name,
     category: row.category || "",
     sku: row.sku || "",
-    costPrice: Number(row.cost_price),
+    // Missing cost means the caller is not authorized to see it (or the
+    // manager is offline), so preserve that state instead of implying zero.
+    costPrice: row.cost_price == null ? null : Number(row.cost_price),
     sellingPrice: Number(row.selling_price),
     quantity: row.quantity,
     lowStockLimit: row.low_stock_limit,
@@ -47,11 +50,74 @@ function toProductRow(product) {
 }
 
 export async function listProducts(businessId, options = {}) {
-  const { page, pageSize, search, category } = options;
+  const { page, pageSize, search, category, omitCostPrice } = options;
+  const isCashier = Boolean(omitCostPrice || getActiveStaffSession()?.user?.isStaff);
+  const client = requireSupabase();
 
-  let query = requireSupabase()
+  // If cashier session, fetch catalog using secure RPC list_counter_products (omitting wholesale cost_price)
+  if (isCashier) {
+    const sessionStaffId = getActiveStaffSession()?.user?.id || null;
+    const validStaffId = sessionStaffId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionStaffId)
+      ? sessionStaffId
+      : null;
+
+    try {
+      const { data: counterData, error: rpcErr } = await client.rpc("list_counter_products", {
+        p_business_id: businessId,
+        p_category: category?.trim() || null,
+        p_search: search?.trim() || null,
+        p_session_token: getStaffSessionToken(),
+        p_staff_account_id: validStaffId,
+      });
+
+      if (!rpcErr && Array.isArray(counterData)) {
+        let list = counterData.map(toProduct);
+        const totalCount = list.length;
+        if (typeof page === "number" && typeof pageSize === "number" && page > 0 && pageSize > 0) {
+          const from = (page - 1) * pageSize;
+          list = list.slice(from, from + pageSize);
+          return { data: list, totalCount };
+        }
+        return list;
+      }
+    } catch {
+      // Fall through to safe column-limited member query.
+    }
+  }
+
+  if (!isCashier) {
+    const offset = page && pageSize ? (page - 1) * pageSize : 0;
+    const limit = page && pageSize ? pageSize : 5000;
+    const { data: managerData, error: managerError } = await client.rpc("list_manager_products", {
+      p_business_id: businessId,
+      p_product_id: null,
+      p_category: category?.trim() || null,
+      p_search: search?.trim() || null,
+      p_offset: offset,
+      p_limit: limit,
+    });
+    if (!managerError && Array.isArray(managerData)) {
+      const countQuery = client.from("products").select("id", { count: "exact", head: true }).eq("business_id", businessId);
+      if (category?.trim()) countQuery.eq("category", category.trim());
+      if (search?.trim()) {
+        const q = `%${search.trim()}%`;
+        countQuery.or(`name.ilike.${q},sku.ilike.${q},brand.ilike.${q}`);
+      }
+      const { count, error: countError } = await countQuery;
+      if (countError) throw countError;
+      const rows = managerData.map(toProduct);
+      return page && pageSize ? { data: rows, totalCount: count ?? rows.length } : rows;
+    }
+    if (managerError && managerError.code !== "42501") throw managerError;
+  }
+
+  const selectColumns = isCashier
+    ? "id, business_id, name, category, sku, selling_price, quantity, low_stock_limit, supplier, size, colour, brand, item_type, tax_treatment"
+    : "id, business_id, name, category, sku, selling_price, quantity, low_stock_limit, supplier, size, colour, brand, item_type, tax_treatment";
+
+  let query = client
     .from("products")
-    .select("*", { count: "exact" })
+    .select(selectColumns, { count: "exact" })
     .eq("business_id", businessId);
 
   if (category && category.trim()) {
@@ -87,25 +153,20 @@ export async function listProducts(businessId, options = {}) {
 }
 
 export async function createProduct(businessId, product) {
-  const { data, error } = await requireSupabase()
-    .from("products")
-    .insert({ business_id: businessId, ...toProductRow(product) })
-    .select()
-    .single();
-
+  const { data, error } = await requireSupabase().rpc("save_manager_product", {
+    p_business_id: businessId,
+    p_product: toProductRow(product),
+  });
   if (error) throw error;
   return toProduct(data);
 }
 
 export async function updateProduct(businessId, productId, product) {
-  const { data, error } = await requireSupabase()
-    .from("products")
-    .update(toProductRow(product))
-    .eq("business_id", businessId)
-    .eq("id", productId)
-    .select()
-    .single();
-
+  const { data, error } = await requireSupabase().rpc("save_manager_product", {
+    p_business_id: businessId,
+    p_product_id: productId,
+    p_product: toProductRow(product),
+  });
   if (error) throw error;
   return toProduct(data);
 }
@@ -121,104 +182,34 @@ export async function deleteProduct(businessId, productId) {
 }
 
 export async function restockProduct(businessId, productId, restockData) {
-  const { quantityAdded, newCostPrice, newSellingPrice, supplierName = "", notes = "" } = restockData;
-  const client = requireSupabase();
-
-  try {
-    const { data, error } = await client.rpc("restock_product", {
-      p_business_id: businessId,
-      p_product_id: productId,
-      p_quantity_added: Number(quantityAdded),
-      p_new_cost_price: Number(newCostPrice),
-      p_new_selling_price: Number(newSellingPrice),
-      p_supplier_name: (supplierName || "").trim(),
-      p_notes: (notes || "").trim(),
-    });
-
-    if (!error) return data;
-
-    const isRpcMissing =
-      error.code === "PGRST202" ||
-      error.message?.includes("Could not find the function") ||
-      error.message?.includes("schema cache");
-
-    if (!isRpcMissing) throw error;
-  } catch (rpcErr) {
-    const isRpcMissing =
-      rpcErr.code === "PGRST202" ||
-      rpcErr.message?.includes("Could not find the function") ||
-      rpcErr.message?.includes("schema cache");
-
-    if (!isRpcMissing) throw rpcErr;
-  }
-
-  // Direct table update fallback if RPC migration has not been applied to Supabase DB yet
-  const { data: currentProduct, error: fetchErr } = await client
-    .from("products")
-    .select("quantity, cost_price, selling_price")
-    .eq("id", productId)
-    .eq("business_id", businessId)
-    .single();
-
-  if (fetchErr) throw fetchErr;
-
-  const prevQty = Number(currentProduct.quantity || 0);
-  const qtyToAdd = Number(quantityAdded || 0);
-  const newQty = prevQty + qtyToAdd;
-  const cost = newCostPrice !== undefined && newCostPrice !== null && !isNaN(newCostPrice)
-    ? Number(newCostPrice)
-    : Number(currentProduct.cost_price || 0);
-  const selling = newSellingPrice !== undefined && newSellingPrice !== null && !isNaN(newSellingPrice)
-    ? Number(newSellingPrice)
-    : Number(currentProduct.selling_price || 0);
-
-  const { error: updateErr } = await client
-    .from("products")
-    .update({
-      quantity: newQty,
-      cost_price: cost,
-      selling_price: selling,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", productId)
-    .eq("business_id", businessId);
-
-  if (updateErr) throw updateErr;
-
-  try {
-    await client.from("product_restocks").insert({
-      business_id: businessId,
-      product_id: productId,
-      quantity_added: qtyToAdd,
-      previous_quantity: prevQty,
-      new_quantity: newQty,
-      old_cost_price: Number(currentProduct.cost_price || 0),
-      new_cost_price: cost,
-      old_selling_price: Number(currentProduct.selling_price || 0),
-      new_selling_price: selling,
-      supplier_name: (supplierName || "").trim(),
-      notes: (notes || "").trim(),
-    });
-  } catch {
-    // Ignore error if product_restocks table is missing
-  }
-
-  return {
-    product_id: productId,
-    previous_quantity: prevQty,
-    new_quantity: newQty,
-    cost_price: cost,
-    selling_price: selling,
-  };
+  const {
+    quantityAdded,
+    newCostPrice,
+    newSellingPrice,
+    supplierName = "",
+    notes = "",
+    costMethod = "avco",
+  } = restockData;
+  const normCostMethod = (costMethod || "avco").toLowerCase();
+  const { data, error } = await requireSupabase().rpc("restock_product", {
+    p_business_id: businessId,
+    p_product_id: productId,
+    p_quantity_added: Number(quantityAdded),
+    p_new_cost_price: Number(newCostPrice),
+    p_new_selling_price: Number(newSellingPrice),
+    p_supplier_name: (supplierName || "").trim(),
+    p_notes: (notes || "").trim(),
+    p_cost_method: normCostMethod,
+  });
+  if (error) throw error;
+  return data;
 }
 
 export async function listProductRestocks(businessId, productId) {
-  const { data, error } = await requireSupabase()
-    .from("product_restocks")
-    .select("*")
-    .eq("business_id", businessId)
-    .eq("product_id", productId)
-    .order("created_at", { ascending: false });
+  const { data, error } = await requireSupabase().rpc("list_manager_product_restocks", {
+    p_business_id: businessId,
+    p_product_id: productId,
+  });
 
   if (error) throw error;
 

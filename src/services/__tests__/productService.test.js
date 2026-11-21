@@ -35,7 +35,7 @@ describe("productService restockProduct", () => {
     expect(supabase.rpc).toHaveBeenCalledWith("restock_product", expect.any(Object));
   });
 
-  it("falls back to direct table update when RPC function is missing from schema cache", async () => {
+  it("calculates Weighted Average Cost (AVCO) by default when RPC function is missing", async () => {
     supabase.rpc.mockResolvedValueOnce({
       data: null,
       error: {
@@ -77,11 +77,66 @@ describe("productService restockProduct", () => {
       quantityAdded: 5,
       newCostPrice: 20,
       newSellingPrice: 30,
+      costMethod: "avco",
+    });
+
+    expect(res.previous_quantity).toBe(10);
+    expect(res.new_quantity).toBe(15);
+    // (10 * 15 + 5 * 20) / 15 = 250 / 15 = 16.67
+    expect(res.cost_price).toBe(16.67);
+    expect(res.selling_price).toBe(30);
+    expect(res.cost_method).toBe("avco");
+  });
+
+  it("replaces cost with latest unit price when costMethod is 'latest'", async () => {
+    supabase.rpc.mockResolvedValueOnce({
+      data: null,
+      error: {
+        code: "PGRST202",
+        message: "Could not find the function public.restock_product in the schema cache",
+      },
+    });
+
+    const mockSelectChain = {
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: { quantity: 10, cost_price: 15, selling_price: 25 },
+        error: null,
+      }),
+    };
+
+    const mockUpdateChain = {
+      eq: vi.fn().mockReturnThis(),
+    };
+
+    const mockInsertChain = {
+      insert: vi.fn().mockResolvedValue({ error: null }),
+    };
+
+    supabase.from.mockImplementation((tableName) => {
+      if (tableName === "products") {
+        return {
+          select: () => mockSelectChain,
+          update: () => mockUpdateChain,
+        };
+      }
+      if (tableName === "product_restocks") {
+        return mockInsertChain;
+      }
+      return {};
+    });
+
+    const res = await restockProduct("biz-1", "prod-1", {
+      quantityAdded: 5,
+      newCostPrice: 20,
+      newSellingPrice: 30,
+      costMethod: "latest",
     });
 
     expect(res.previous_quantity).toBe(10);
     expect(res.new_quantity).toBe(15);
     expect(res.cost_price).toBe(20);
     expect(res.selling_price).toBe(30);
+    expect(res.cost_method).toBe("latest");
   });
 });

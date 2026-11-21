@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, Suspense, lazy } from "react";
 import { AppLogo } from "./components/common/AppLogo.jsx";
 import { AppShell } from "./components/layout/AppShell.jsx";
+import { ErrorBoundary } from "./components/common/ErrorBoundary.jsx";
 import { AuthScreen, PasswordRecoveryScreen } from "./features/auth/AuthScreen.jsx";
 import { getRepository } from "./services/repositories/dataRepository.js";
 import { useAuthSession } from "./hooks/useAuthSession.js";
@@ -177,6 +178,9 @@ export default function App() {
     setProducts,
     productsLoading,
     productsError,
+    catalogProducts,
+    catalogLoading,
+    setCatalogProducts,
     categories,
     categoriesLoading,
     categoriesError,
@@ -213,7 +217,7 @@ export default function App() {
     fetchProductStockTimeline,
     refreshAnalytics,
     resetAnalytics,
-  } = useAnalytics(repository, businessId);
+  } = useAnalytics(repository, businessId, permissions.canViewProfit);
 
   const {
     customers,
@@ -271,7 +275,10 @@ export default function App() {
     return updated;
   };
 
-  const handleCompleteSale = async ({ customer, lines, paymentType, amountPaid, dueDate, notes }) => {
+  const handleCompleteSale = async ({ customer, lines, paymentType, amountPaid, dueDate, notes, clientSaleId, queuedBusinessId }) => {
+    if (queuedBusinessId && queuedBusinessId !== businessId) {
+      throw new Error("This offline sale belongs to a different business. Switch to that business to sync it.");
+    }
     const result = await repository.completeSale(businessId, {
       customer,
       lines,
@@ -279,9 +286,16 @@ export default function App() {
       amountPaid,
       dueDate,
       notes,
+      clientSaleId,
     });
 
     setProducts((current) =>
+      current.map((product) => {
+        const updated = result.updatedProducts.find((item) => item.id === product.id);
+        return updated || product;
+      })
+    );
+    setCatalogProducts((current) =>
       current.map((product) => {
         const updated = result.updatedProducts.find((item) => item.id === product.id);
         return updated || product;
@@ -320,14 +334,18 @@ export default function App() {
   const {
     queuedCount,
     conflictedCount,
+    conflictedSales,
     isSyncing,
     refreshQueueCount,
     triggerSync,
+    dismissConflicted,
     dismissAllConflicted,
+    retryConflicted,
   } = useOfflineSync(
     handleCompleteSale,
     isOnline,
-    handleSyncComplete
+    handleSyncComplete,
+    businessId
   );
 
   if (isLoading || (session && workspaceLoading)) {
@@ -366,7 +384,10 @@ export default function App() {
       onSignOut={handleSignOut}
       queuedCount={queuedCount}
       conflictedCount={conflictedCount}
+      conflictedSales={conflictedSales}
       onDismissConflicted={dismissAllConflicted}
+      onRetryConflicted={retryConflicted}
+      onDismissSingleConflicted={dismissConflicted}
       isSyncing={isSyncing}
       onTriggerSync={triggerSync}
       pwaState={pwaState}
@@ -374,8 +395,9 @@ export default function App() {
       previewRole={previewRole}
       onSetPreviewRole={setPreviewRole}
     >
-      <Suspense fallback={<div className="p-6">Loading…</div>}>
-        <Screen
+      <ErrorBoundary>
+        <Suspense fallback={<div className="p-6">Loading...</div>}>
+          <Screen
           business={business}
           currentUser={session?.user}
           permissions={permissions}
@@ -412,9 +434,9 @@ export default function App() {
           onCompleteSale={handleCompleteSale}
           onCreateCategory={handleCreateCategory}
           onUpdateBusiness={handleUpdateBusinessProfile}
-          products={products}
+          products={activeScreen === "sales" ? (catalogProducts && catalogProducts.length ? catalogProducts : products) : products}
           productsError={productsError}
-          productsLoading={productsLoading}
+          productsLoading={activeScreen === "sales" ? (catalogLoading && !catalogProducts.length) : productsLoading}
           reportSummary={reportSummary}
           reportRange={reportRange}
           reportStartDate={reportStartDate}
@@ -448,7 +470,8 @@ export default function App() {
           onPageSizeChange={setPageSize}
           pwaState={pwaState}
         />
-      </Suspense>
+        </Suspense>
+      </ErrorBoundary>
     </AppShell>
   );
 }

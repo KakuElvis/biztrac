@@ -1,17 +1,22 @@
 const DB_NAME = "biztrac_offline_db";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export const STORES = {
   QUEUED_SALES: "queued_sales",
   CONFLICTED_SALES: "conflicted_sales",
   CACHED_CATALOG: "cached_catalog",
   CACHED_CUSTOMERS: "cached_customers",
+  CACHED_INVOICES: "cached_invoices",
 };
+
+export function isIndexedDBAvailable() {
+  return typeof window !== "undefined" && "indexedDB" in window && window.indexedDB !== null;
+}
 
 function openDB() {
   return new Promise((resolve, reject) => {
-    if (typeof window === "undefined" || !("indexedDB" in window)) {
-      return reject(new Error("IndexedDB is not supported in this environment."));
+    if (!isIndexedDBAvailable()) {
+      return resolve(null);
     }
 
     const request = window.indexedDB.open(DB_NAME, DB_VERSION);
@@ -30,6 +35,9 @@ function openDB() {
       if (!db.objectStoreNames.contains(STORES.CACHED_CUSTOMERS)) {
         db.createObjectStore(STORES.CACHED_CUSTOMERS, { keyPath: "id" });
       }
+      if (!db.objectStoreNames.contains(STORES.CACHED_INVOICES)) {
+        db.createObjectStore(STORES.CACHED_INVOICES, { keyPath: "id" });
+      }
     };
 
     request.onsuccess = () => resolve(request.result);
@@ -40,6 +48,7 @@ function openDB() {
 export async function putItem(storeName, item) {
   try {
     const db = await openDB();
+    if (!db) return null;
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(storeName, "readwrite");
       const store = transaction.objectStore(storeName);
@@ -56,6 +65,7 @@ export async function putItem(storeName, item) {
 export async function getItem(storeName, key) {
   try {
     const db = await openDB();
+    if (!db) return null;
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(storeName, "readonly");
       const store = transaction.objectStore(storeName);
@@ -72,6 +82,7 @@ export async function getItem(storeName, key) {
 export async function getAllItems(storeName) {
   try {
     const db = await openDB();
+    if (!db) return [];
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(storeName, "readonly");
       const store = transaction.objectStore(storeName);
@@ -88,6 +99,7 @@ export async function getAllItems(storeName) {
 export async function removeItem(storeName, key) {
   try {
     const db = await openDB();
+    if (!db) return false;
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(storeName, "readwrite");
       const store = transaction.objectStore(storeName);
@@ -104,6 +116,7 @@ export async function removeItem(storeName, key) {
 export async function clearStore(storeName) {
   try {
     const db = await openDB();
+    if (!db) return false;
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(storeName, "readwrite");
       const store = transaction.objectStore(storeName);

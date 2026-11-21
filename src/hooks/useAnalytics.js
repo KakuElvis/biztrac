@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { showToast } from "../lib/toast.js";
 import { emptyDashboardSummary } from "../services/dashboardService.js";
 import { emptyReportSummary } from "../services/reportService.js";
 
-export function useAnalytics(repository, businessId) {
+export function useAnalytics(repository, businessId, canViewProfit = true) {
   const [dashboardSummary, setDashboardSummary] = useState(emptyDashboardSummary);
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState("");
@@ -28,7 +28,7 @@ export function useAnalytics(repository, businessId) {
     setDashboardError("");
 
     repository
-      .getDashboardSummary(businessId)
+      .getDashboardSummary(businessId, { includeProfit: canViewProfit })
       .then((nextSummary) => {
         if (isMounted) setDashboardSummary(nextSummary);
       })
@@ -47,13 +47,20 @@ export function useAnalytics(repository, businessId) {
     return () => {
       isMounted = false;
     };
-  }, [businessId, repository]);
+  }, [businessId, repository, canViewProfit]);
 
   useEffect(() => {
     let isMounted = true;
 
     if (!businessId) {
       setReportSummary(emptyReportSummary);
+      setReportsLoading(false);
+      return undefined;
+    }
+
+    if (!canViewProfit) {
+      setReportSummary(emptyReportSummary);
+      setReportsError("");
       setReportsLoading(false);
       return undefined;
     }
@@ -85,18 +92,20 @@ export function useAnalytics(repository, businessId) {
     return () => {
       isMounted = false;
     };
-  }, [businessId, reportRange, reportStartDate, reportEndDate, reportRefreshKey, repository]);
+  }, [businessId, reportRange, reportStartDate, reportEndDate, reportRefreshKey, repository, canViewProfit]);
 
-  const refreshAnalytics = async (bId = businessId) => {
+  const refreshAnalytics = useCallback(async (bId = businessId) => {
     if (!bId) return;
 
     const [nextDashboard, nextReport] = await Promise.allSettled([
-      repository.getDashboardSummary(bId),
-      repository.getReportSummary(bId, {
-        range: reportRange,
-        startDate: reportStartDate || undefined,
-        endDate: reportEndDate || undefined,
-      }),
+      repository.getDashboardSummary(bId, { includeProfit: canViewProfit }),
+      canViewProfit
+        ? repository.getReportSummary(bId, {
+            range: reportRange,
+            startDate: reportStartDate || undefined,
+            endDate: reportEndDate || undefined,
+          })
+        : Promise.resolve(emptyReportSummary),
     ]);
 
     if (nextDashboard.status === "fulfilled") {
@@ -112,7 +121,7 @@ export function useAnalytics(repository, businessId) {
       console.error("Unable to refresh reports", nextReport.reason);
       showToast("Unable to refresh reports");
     }
-  };
+  }, [businessId, canViewProfit, repository, reportRange, reportStartDate, reportEndDate]);
 
   const resetAnalytics = () => {
     setDashboardSummary(emptyDashboardSummary);

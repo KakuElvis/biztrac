@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { showToast } from "../lib/toast.js";
+import { supabase } from "../lib/supabase.js";
 
 export function useCustomers(repository, businessId, refreshAnalytics) {
   const [customers, setCustomers] = useState([]);
@@ -40,14 +41,73 @@ export function useCustomers(repository, businessId, refreshAnalytics) {
     };
   }, [businessId, repository]);
 
+  // Realtime subscription for debtor balance and customer updates across counter terminals
+  useEffect(() => {
+    if (!businessId || !supabase) return undefined;
+
+    let isSubscribed = true;
+    let debounceTimer = null;
+
+    const reloadDebtorBalances = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        repository
+          .listCustomers(businessId)
+          .then((next) => {
+            if (isSubscribed) {
+              setCustomers(next);
+              refreshAnalytics?.(businessId);
+            }
+          })
+          .catch((err) => {
+            console.warn("[useCustomers] Realtime sync error:", err?.message || err);
+          });
+      }, 300);
+    };
+
+    const channel = supabase
+      .channel(`customers-realtime:${businessId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "customers",
+          filter: `business_id=eq.${businessId}`,
+        },
+        () => {
+          reloadDebtorBalances();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "sales",
+          filter: `business_id=eq.${businessId}`,
+        },
+        () => {
+          reloadDebtorBalances();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isSubscribed = false;
+      if (debounceTimer) clearTimeout(debounceTimer);
+      supabase.removeChannel(channel);
+    };
+  }, [businessId, repository, refreshAnalytics]);
+
   const handleCreateCustomer = async (customer) => {
     const nextCustomer = await repository.createCustomer(businessId, customer);
     setCustomers((current) => [...current, nextCustomer].sort((a, b) => a.name.localeCompare(b.name)));
     return nextCustomer;
   };
 
-  const handlePayDebt = async (customerId, amount, paymentMethod) => {
-    const res = await repository.payCustomerDebt(businessId, customerId, amount, paymentMethod);
+  const handlePayDebt = async (customerId, amount, paymentMethod, staffAccountId) => {
+    const res = await repository.payCustomerDebt(businessId, customerId, amount, paymentMethod, staffAccountId);
     const applied = typeof res === "object" ? res.appliedAmount : Number(res || amount);
     setCustomers((current) =>
       current.map((c) => {
@@ -90,8 +150,8 @@ export function useCustomers(repository, businessId, refreshAnalytics) {
     return updated;
   };
 
-  const fetchCustomerDetails = async (customerId) => {
-    return repository.getCustomerDetails(businessId, customerId);
+  const fetchCustomerDetails = async (customerId, options) => {
+    return repository.getCustomerDetails(businessId, customerId, options);
   };
 
   const resetCustomers = () => {

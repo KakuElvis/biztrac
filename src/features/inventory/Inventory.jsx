@@ -99,10 +99,9 @@ export function Inventory({
 
   const stockStats = useMemo(() => {
     const lowStock = products.filter((product) => product.quantity <= product.lowStockLimit);
-    const totalValue = products.reduce(
-      (total, product) => total + product.costPrice * product.quantity,
-      0
-    );
+    const totalValue = products.every((product) => Number.isFinite(product.costPrice))
+      ? products.reduce((total, product) => total + product.costPrice * product.quantity, 0)
+      : null;
     const totalRetailValue = products.reduce(
       (total, product) => total + product.sellingPrice * product.quantity,
       0
@@ -240,8 +239,8 @@ export function Inventory({
         {canViewCostPrice ? (
           <StatCard
             label="Cost stock value"
-            value={formatCurrency(stockStats.totalValue)}
-            note="Purchase cost investment"
+            value={stockStats.totalValue == null ? "Unavailable offline" : formatCurrency(stockStats.totalValue)}
+            note={stockStats.totalValue == null ? "Reconnect to load cost values" : "Purchase cost investment"}
             icon={CreditCard}
             tone="teal"
           />
@@ -570,7 +569,7 @@ function ProductCard({
             label="Cost Price"
             value={
               canViewCostPrice ? (
-                formatCurrency(product.costPrice)
+                product.costPrice == null ? "Unavailable offline" : formatCurrency(product.costPrice)
               ) : (
                 <MaskedValue isAllowed={false} placeholder="••••" />
               )
@@ -722,6 +721,7 @@ function RestockModal({ product, onClose, onRestock }) {
   const [quantityAdded, setQuantityAdded] = useState("10");
   const [newCostPrice, setNewCostPrice] = useState(String(product.costPrice || 0));
   const [newSellingPrice, setNewSellingPrice] = useState(String(product.sellingPrice || 0));
+  const [costMethod, setCostMethod] = useState("avco"); // "avco" | "latest"
   const [supplierName, setSupplierName] = useState(product.supplier || "");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -730,11 +730,20 @@ function RestockModal({ product, onClose, onRestock }) {
   const addedNum = Number(quantityAdded) || 0;
   const costNum = Number(newCostPrice) || 0;
   const sellingNum = Number(newSellingPrice) || 0;
+  const existingQty = Number(product.quantity || 0);
+  const existingCost = Number(product.costPrice || 0);
 
-  const newTotalQuantity = product.quantity + addedNum;
-  const costDiff = costNum - product.costPrice;
-  const sellingDiff = sellingNum - product.sellingPrice;
-  const unitProfitMargin = sellingNum - costNum;
+  const newTotalQuantity = existingQty + addedNum;
+
+  // Calculate blended AVCO unit cost vs latest unit cost
+  const effectiveUnitCost =
+    costMethod === "avco" && existingQty > 0 && addedNum > 0
+      ? Math.round((((existingQty * existingCost) + (addedNum * costNum)) / newTotalQuantity) * 100) / 100
+      : costNum;
+
+  const costDiff = effectiveUnitCost - existingCost;
+  const sellingDiff = sellingNum - (product.sellingPrice || 0);
+  const unitProfitMargin = sellingNum - effectiveUnitCost;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -759,6 +768,7 @@ function RestockModal({ product, onClose, onRestock }) {
           newSellingPrice: sellingNum,
           supplierName: supplierName.trim(),
           notes: notes.trim(),
+          costMethod,
         });
       }
       showToast(`Restocked +${addedNum} pcs of ${product.name}.`, { type: "success" });
@@ -789,7 +799,12 @@ function RestockModal({ product, onClose, onRestock }) {
 
         {/* Live Calculation Preview Banner */}
         <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-4 space-y-2">
-          <p className="text-xs font-bold uppercase tracking-wider text-sky-800">Batch Preview Calculation</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold uppercase tracking-wider text-sky-800">Batch Preview Calculation</p>
+            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${costMethod === "avco" && existingQty > 0 ? "bg-sky-200/80 text-sky-900" : "bg-slate-200 text-slate-700"}`}>
+              {costMethod === "avco" && existingQty > 0 ? "AVCO Blended Valuation" : "Batch Unit Cost"}
+            </span>
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
             <div className="bg-white p-2 rounded-xl border border-sky-100">
               <span className="text-slate-500 block text-[10px] font-bold">New Qty</span>
@@ -797,8 +812,8 @@ function RestockModal({ product, onClose, onRestock }) {
               <span className="text-[10px] text-palm font-bold block">(+{addedNum})</span>
             </div>
             <div className="bg-white p-2 rounded-xl border border-sky-100">
-              <span className="text-slate-500 block text-[10px] font-bold">Cost Price</span>
-              <span className="text-sm font-black text-ink">{formatCurrency(costNum)}</span>
+              <span className="text-slate-500 block text-[10px] font-bold">Unit Cost Price</span>
+              <span className="text-sm font-black text-ink">{formatCurrency(effectiveUnitCost)}</span>
               {costDiff !== 0 ? (
                 <span className={`text-[10px] font-bold block ${costDiff > 0 ? "text-amber-600" : "text-emerald-600"}`}>
                   {costDiff > 0 ? `+${formatCurrency(costDiff)}` : formatCurrency(costDiff)}
@@ -825,6 +840,47 @@ function RestockModal({ product, onClose, onRestock }) {
                 {sellingNum > 0 ? `${((unitProfitMargin / sellingNum) * 100).toFixed(1)}%` : "0%"}
               </span>
             </div>
+          </div>
+        </div>
+
+        {/* Costing Method Selector */}
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 space-y-2">
+          <label className="text-xs font-black uppercase tracking-wider text-slate-700 block">Cost Calculation Method</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setCostMethod("avco")}
+              className={`rounded-xl border p-2.5 text-left transition ${
+                costMethod === "avco"
+                  ? "border-palm bg-palm/10 text-palmDeep"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-black">Weighted Average (AVCO)</p>
+                {costMethod === "avco" && <span className="h-2 w-2 rounded-full bg-palm"></span>}
+              </div>
+              <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">
+                Recommended: Blends existing {existingQty} pcs @ {formatCurrency(existingCost)} with new shipment.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCostMethod("latest")}
+              className={`rounded-xl border p-2.5 text-left transition ${
+                costMethod === "latest"
+                  ? "border-palm bg-palm/10 text-palmDeep"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-black">Replace with Latest</p>
+                {costMethod === "latest" && <span className="h-2 w-2 rounded-full bg-palm"></span>}
+              </div>
+              <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">
+                Overwrites unit cost with this incoming shipment ({formatCurrency(costNum)}).
+              </p>
+            </button>
           </div>
         </div>
 

@@ -1,5 +1,6 @@
 import { requireSupabase, toNumber } from "./serviceUtils.js";
 import { toCustomer } from "./customerService.js";
+import { getActiveStaffSession, getStaffSessionToken } from "./staffService.js";
 
 function toPaymentMethod(value) {
   const normalized = String(value || "cash").toLowerCase();
@@ -16,7 +17,7 @@ function toProduct(row) {
     name: row.name,
     category: row.category || "",
     sku: row.sku || "",
-    costPrice: Number(row.cost_price),
+    costPrice: row.cost_price == null ? 0 : Number(row.cost_price),
     sellingPrice: Number(row.selling_price),
     quantity: row.quantity,
     lowStockLimit: row.low_stock_limit,
@@ -67,7 +68,7 @@ function validateLines(lines) {
   });
 }
 
-export async function createSale(businessId, { customer, lines, paymentType, amountPaid, dueDate, notes }) {
+export async function createSale(businessId, { customer, lines, paymentType, amountPaid, dueDate, notes, staffAccountId, clientSaleId = crypto.randomUUID() }) {
   validateLines(lines);
 
   const paymentMethod = toPaymentMethod(paymentType);
@@ -78,6 +79,11 @@ export async function createSale(businessId, { customer, lines, paymentType, amo
   if (paymentMethod === "credit" && !customerId && !customerName?.trim()) {
     throw new Error("Credit sales require a customer.");
   }
+
+  const sessionStaffId = staffAccountId || getActiveStaffSession()?.user?.id || null;
+  const validStaffId = sessionStaffId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionStaffId)
+    ? sessionStaffId
+    : null;
 
   const { data, error } = await requireSupabase().rpc("record_sale", {
     p_business_id: businessId,
@@ -92,6 +98,9 @@ export async function createSale(businessId, { customer, lines, paymentType, amo
     p_payment_method: paymentMethod,
     p_amount_paid: amountPaid !== undefined && amountPaid !== null ? Number(amountPaid) : null,
     p_due_date: dueDate || null,
+    p_session_token: getStaffSessionToken(),
+    p_staff_account_id: validStaffId,
+    p_client_sale_id: clientSaleId || crypto.randomUUID(),
   });
 
   if (error) throw error;

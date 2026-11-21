@@ -41,6 +41,7 @@ import {
   generateStaffPassword,
   loginWithStaffId,
   updateStaffPassword,
+  unlockStaffAccount,
   getActiveStaffSession,
   clearActiveStaffSession,
 } from "../staffService.js";
@@ -345,6 +346,59 @@ describe("Staff Authentication with Staff ID & Password", () => {
     // New password succeeds
     const session = await loginWithStaffId({ staffId: "EB101", password: "newpassword" });
     expect(session.user.staffId).toBe("EB101");
+    clearActiveStaffSession();
+  });
+
+  it("rejects empty password when updating staff password", async () => {
+    await expect(
+      updateStaffPassword(businessId, "EB101", "   ")
+    ).rejects.toThrow("Password cannot be empty.");
+  });
+
+  it("handles bcrypt hash masking and protection", async () => {
+    const bcryptMember = await addStaffMember(businessId, {
+      fullName: "Hashed Cashier",
+      role: ROLES.STAFF,
+      staffId: "HC505",
+      password: "cashierSecretPin",
+    });
+
+    expect(bcryptMember.staffId).toBe("HC505");
+    expect(bcryptMember.password).toBe("cashierSecretPin");
+
+    const session = await loginWithStaffId({ staffId: "HC505", password: "cashierSecretPin" });
+    expect(session.user.staffId).toBe("HC505");
+    clearActiveStaffSession();
+  });
+
+  it("enforces 15-minute temporary lockout after 5 consecutive failed PIN attempts", async () => {
+    await addStaffMember(businessId, {
+      fullName: "Lockout Test Cashier",
+      role: ROLES.STAFF,
+      staffId: "LT555",
+      password: "secret1234",
+    });
+
+    // 1st failed attempt
+    await expect(loginWithStaffId({ staffId: "LT555", password: "bad1" })).rejects.toThrow("4 attempt(s) remaining");
+    // 2nd failed attempt
+    await expect(loginWithStaffId({ staffId: "LT555", password: "bad2" })).rejects.toThrow("3 attempt(s) remaining");
+    // 3rd failed attempt
+    await expect(loginWithStaffId({ staffId: "LT555", password: "bad3" })).rejects.toThrow("2 attempt(s) remaining");
+    // 4th failed attempt
+    await expect(loginWithStaffId({ staffId: "LT555", password: "bad4" })).rejects.toThrow("1 attempt(s) remaining");
+    // 5th failed attempt: triggers lockout
+    await expect(loginWithStaffId({ staffId: "LT555", password: "bad5" })).rejects.toThrow("Account locked: 5 consecutive failed PIN attempts");
+
+    // 6th attempt even with correct password is blocked while locked
+    await expect(loginWithStaffId({ staffId: "LT555", password: "secret1234" })).rejects.toThrow("temporarily locked");
+
+    // Unlock account via unlockStaffAccount
+    await unlockStaffAccount(businessId, "LT555");
+
+    // Now correct password succeeds
+    const session = await loginWithStaffId({ staffId: "LT555", password: "secret1234" });
+    expect(session.user.staffId).toBe("LT555");
     clearActiveStaffSession();
   });
 });

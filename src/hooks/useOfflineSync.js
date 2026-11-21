@@ -8,7 +8,7 @@ import {
   syncOfflineQueue,
 } from "../services/offlineQueueService.js";
 
-export function useOfflineSync(onCompleteSale, isOnline, onSyncComplete) {
+export function useOfflineSync(onCompleteSale, isOnline, onSyncComplete, businessId) {
   const [queuedCount, setQueuedCount] = useState(0);
   const [conflictedCount, setConflictedCount] = useState(0);
   const [conflictedSales, setConflictedSales] = useState([]);
@@ -17,8 +17,8 @@ export function useOfflineSync(onCompleteSale, isOnline, onSyncComplete) {
   const refreshQueueCount = useCallback(async () => {
     try {
       const [queuedItems, conflictedItems] = await Promise.all([
-        getQueuedSales(),
-        getConflictedSales(),
+        getQueuedSales(businessId),
+        getConflictedSales(businessId),
       ]);
       setQueuedCount(queuedItems.length);
       setConflictedCount(conflictedItems.length);
@@ -29,16 +29,16 @@ export function useOfflineSync(onCompleteSale, isOnline, onSyncComplete) {
       setConflictedCount(0);
       setConflictedSales([]);
     }
-  }, []);
+  }, [businessId]);
 
   const triggerSync = useCallback(async () => {
     if (!onCompleteSale || isSyncing || !isOnline) return 0;
 
     setIsSyncing(true);
     try {
-      const syncedCount = await syncOfflineQueue(async (businessId, payload) => {
-        return onCompleteSale(payload);
-      });
+      const syncedCount = await syncOfflineQueue(async (queuedBusinessId, payload) =>
+        onCompleteSale({ ...payload, queuedBusinessId })
+      , businessId);
 
       await refreshQueueCount();
 
@@ -53,7 +53,7 @@ export function useOfflineSync(onCompleteSale, isOnline, onSyncComplete) {
     } finally {
       setIsSyncing(false);
     }
-  }, [onCompleteSale, isSyncing, isOnline, refreshQueueCount, onSyncComplete]);
+  }, [onCompleteSale, isSyncing, isOnline, refreshQueueCount, onSyncComplete, businessId]);
 
   const dismissConflicted = useCallback(async (id) => {
     await removeConflictedSale(id);
@@ -61,17 +61,17 @@ export function useOfflineSync(onCompleteSale, isOnline, onSyncComplete) {
   }, [refreshQueueCount]);
 
   const dismissAllConflicted = useCallback(async () => {
-    await clearConflictedSales();
+    await clearConflictedSales(businessId);
     await refreshQueueCount();
-  }, [refreshQueueCount]);
+  }, [refreshQueueCount, businessId]);
 
   const retryConflicted = useCallback(async (id) => {
-    await retryConflictedSale(id);
+    await retryConflictedSale(id, businessId);
     await refreshQueueCount();
     if (isOnline) {
       triggerSync();
     }
-  }, [refreshQueueCount, isOnline, triggerSync]);
+  }, [refreshQueueCount, isOnline, triggerSync, businessId]);
 
   useEffect(() => {
     refreshQueueCount();

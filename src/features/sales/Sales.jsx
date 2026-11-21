@@ -28,6 +28,7 @@ import { formatCurrency } from "../../lib/formatters.js";
 import { formatReceiptDate, printThermalReceipt } from "../../lib/receiptHtml.js";
 import { showToast } from "../../lib/toast.js";
 import { calculateSaleTaxes } from "../../lib/taxCalculator.js";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   enqueueOfflineSale,
   getQueuedSales,
@@ -129,6 +130,7 @@ function formatGhanaPhoneForWhatsApp(phone) {
   if (digits.startsWith("0") && digits.length === 10) {
     digits = "233" + digits.slice(1);
   }
+  if (digits.startsWith("00")) digits = digits.slice(2);
   return digits;
 }
 
@@ -375,6 +377,39 @@ export function Sales({
   const [bankAmount, setBankAmount] = useState("");
   const searchInputRef = useRef(null);
   const checkoutSectionRef = useRef(null);
+  const productGridRef = useRef(null);
+  const addToCartRef = useRef(null);
+  useEffect(() => {
+    let buffer = "";
+    let lastKeyAt = 0;
+    const onScannerKey = (event) => {
+      const target = document.activeElement;
+      const isTextInput = target && ["INPUT", "TEXTAREA"].includes(target.tagName);
+
+      if (event.key === "Enter" && buffer.length >= 3) {
+        if (!isTextInput) {
+          const scanned = buffer.trim().toLowerCase();
+          const match = products.find((p) => String(p.sku || "").trim().toLowerCase() === scanned);
+          if (match && match.quantity > 0) {
+            event.preventDefault();
+            event.stopPropagation();
+            addToCartRef.current?.(match.id);
+            showToast(`${match.name} added to cart`, { type: "success" });
+          }
+        }
+        buffer = "";
+        return;
+      }
+      if (event.key.length !== 1 || event.ctrlKey || event.altKey || event.metaKey) return;
+      if (isTextInput) return;
+      const now = Date.now();
+      buffer = now - lastKeyAt > 80 ? event.key : `${buffer}${event.key}`;
+      lastKeyAt = now;
+      if (buffer.length > 64) buffer = buffer.slice(-64);
+    };
+    window.addEventListener("keydown", onScannerKey, true);
+    return () => window.removeEventListener("keydown", onScannerKey, true);
+  }, [products]);
 
   const scrollToCheckout = () => {
     checkoutSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -418,6 +453,13 @@ export function Sales({
 
     return list;
   }, [products, selectedCategory, productSearch]);
+
+  const productVirtualizer = useVirtualizer({
+    count: filteredProducts.length,
+    getScrollElement: () => productGridRef.current,
+    estimateSize: () => 104,
+    overscan: 8,
+  });
 
   const cartLines = cart
     .map((line) => {
@@ -502,6 +544,13 @@ export function Sales({
     return "";
   }, [customerMode, customers, selectedCustomerId, newCustomerPhone]);
 
+  const selectedCustomerObj = useMemo(() => {
+    if (customerMode === "existing" && selectedCustomerId) {
+      return customers.find((c) => c.id === selectedCustomerId) || null;
+    }
+    return null;
+  }, [customerMode, customers, selectedCustomerId]);
+
   function getCustomerName() {
     if (customerMode === "existing") {
       return customers.find((customer) => customer.id === selectedCustomerId)?.name || "";
@@ -545,7 +594,7 @@ export function Sales({
     }
     if (!onCompleteSale) return;
     try {
-      const synced = await syncOfflineQueue((bId, payload) => onCompleteSale(payload));
+      const synced = await syncOfflineQueue((bId, payload) => onCompleteSale({ ...payload, clientSaleId: payload.clientSaleId }));
       if (synced > 0) {
         await readQueueItems();
       }
@@ -565,7 +614,7 @@ export function Sales({
     readQueueItems();
   }, [readQueueItems]);
 
-  const addToCart = (productId) => {
+  const addToCart = useCallback((productId) => {
     setActionError("");
     setSuccessMessage("");
 
@@ -583,7 +632,8 @@ export function Sales({
       }
       return [...current, { productId, quantity: 1 }];
     });
-  };
+  }, [products]);
+  addToCartRef.current = addToCart;
 
   const changeQuantity = (productId, change) => {
     setActionError("");
@@ -708,11 +758,25 @@ export function Sales({
       parsedAmountPaid = total;
     }
 
+    if (!Number.isFinite(parsedAmountPaid) || parsedAmountPaid < 0) {
+      setActionError("Enter a valid amount paid.");
+      return;
+    }
+    if (parsedAmountPaid < total && customerMode === "walk-in") {
+      setActionError("Select or add a customer when a sale will have a balance due.");
+      return;
+    }
+    if (paymentType === "Cash" && cashTendered !== "" && tenderedNum < total) {
+      setActionError("Cash tendered must cover the full sale total.");
+      return;
+    }
+
     if (cashierName) {
       paymentNotes = paymentNotes ? `${paymentNotes} | Sold by: ${cashierName}` : `Sold by: ${cashierName}`;
     }
 
     setIsSaving(true);
+    const clientSaleId = crypto.randomUUID();
     try {
       const sale = await onCompleteSale({
         customer: getCustomerPayload(),
@@ -721,6 +785,7 @@ export function Sales({
         amountPaid: parsedAmountPaid,
         dueDate: paymentType === "Credit" ? dueDate : null,
         notes: paymentNotes,
+        clientSaleId,
       });
       const receipt = {
         reference: sale.reference,
@@ -776,15 +841,17 @@ export function Sales({
         try {
           const createdAt = new Date().toISOString();
           await enqueueOfflineSale(business?.id || null, {
+            clientSaleId,
             customer: getCustomerPayload(),
             lines: cartLines,
             paymentType,
             amountPaid: parsedAmountPaid,
             dueDate: paymentType === "Credit" ? dueDate || null : null,
             notes: paymentNotes,
+            staffAccountId: currentUser?.id || null,
           });
-          showToast("No network — sale saved to IndexedDB offline queue.", { type: "warn" });
-          setActionError("Saved offline — will sync when connection resumes.");
+          showToast("No network - sale saved to IndexedDB offline queue.", { type: "warn" });
+          setActionError("Saved offline - will sync when connection resumes.");
           const draftReceipt = {
             reference: `OFFLINE-${createdAt.replace(/[:.]/g, "-")}`,
             customerName: getCustomerName(),
@@ -1038,7 +1105,7 @@ export function Sales({
               </div>
             ) : null}
 
-            <div className="grid max-h-[30rem] gap-3 overflow-y-auto pr-0.5 sm:grid-cols-2">
+            <div ref={productGridRef} className="max-h-[30rem] overflow-y-auto pr-0.5">
               {!products.length ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-500 sm:col-span-2">
                   Add products in Inventory before recording a sale.
@@ -1062,7 +1129,10 @@ export function Sales({
                 </div>
               ) : null}
 
-              {filteredProducts.map((product) => {
+              {filteredProducts.length > 0 ? (
+                <div style={{ height: `${productVirtualizer.getTotalSize()}px`, position: "relative" }}>
+                {productVirtualizer.getVirtualItems().map((virtualRow) => {
+                const product = filteredProducts[virtualRow.index];
                 const inCartLine = cartLines.find((l) => l.productId === product.id);
                 const inCartQty = inCartLine ? inCartLine.quantityNum : 0;
                 const isOutOfStock = product.quantity <= 0;
@@ -1070,6 +1140,7 @@ export function Sales({
                 return (
                   <button
                     key={product.id}
+                    style={{ position: "absolute", top: 0, left: 0, width: "100%", height: `${virtualRow.size}px`, transform: `translateY(${virtualRow.start}px)` }}
                     className={`flex min-h-24 items-center justify-between gap-3 rounded-2xl border p-4 text-left transition active:scale-[0.98] ${
                       inCartQty > 0
                         ? "border-palm ring-2 ring-palm/20 bg-skyglass/40 shadow-sm"
@@ -1099,7 +1170,9 @@ export function Sales({
                     </div>
                   </button>
                 );
-              })}
+                })}
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -1623,19 +1696,38 @@ export function Sales({
             </div>
 
             {customerMode === "existing" ? (
-              <select
-                className="field mt-3"
-                disabled={customersLoading}
-                value={selectedCustomerId}
-                onChange={(event) => setSelectedCustomerId(event.target.value)}
-              >
-                <option value="">Select customer</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.name}
-                  </option>
-                ))}
-              </select>
+              <>
+                <select
+                  className="field mt-3"
+                  disabled={customersLoading}
+                  value={selectedCustomerId}
+                  onChange={(event) => setSelectedCustomerId(event.target.value)}
+                >
+                  <option value="">Select customer</option>
+                  {customers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.name} {customer.debt > 0 ? `(Owes ${formatCurrency(customer.debt)})` : ""}
+                    </option>
+                  ))}
+                </select>
+
+                {selectedCustomerObj && selectedCustomerObj.debt > 0 ? (
+                  <div className="mt-2.5 flex items-center justify-between rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 animate-in fade-in">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+                      <div>
+                        <span className="font-bold">Outstanding Debt: </span>
+                        <span className="font-black text-rose-700">{formatCurrency(selectedCustomerObj.debt)}</span>
+                      </div>
+                    </div>
+                    {paymentType === "Credit" && (
+                      <span className="rounded-md bg-amber-200/80 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-900">
+                        Review Credit Limit
+                      </span>
+                    )}
+                  </div>
+                ) : null}
+              </>
             ) : null}
 
             {customerMode === "new" ? (

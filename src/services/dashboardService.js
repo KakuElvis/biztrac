@@ -4,6 +4,7 @@ import {
   shortReference,
   formatPaymentMethod,
   loadCustomerNames,
+  fetchSaleItemsInChunks,
 } from "./serviceUtils.js";
 
 export const emptyDashboardSummary = {
@@ -76,7 +77,7 @@ function toDebtor(row, customerNames) {
   };
 }
 
-export async function getDashboardSummary(businessId) {
+export async function getDashboardSummary(businessId, { includeProfit = true } = {}) {
   const client = requireSupabase();
   const { startIso, endIso, dateKey } = getTodayBounds();
 
@@ -112,14 +113,22 @@ export async function getDashboardSummary(businessId) {
   if (recentSalesResult.error) throw recentSalesResult.error;
 
   const todaySaleIds = todaySalesResult.data.map((sale) => sale.id);
-  const saleItemsResult = todaySaleIds.length
-    ? await client
-        .from("sale_items")
-        .select("sale_id, quantity, unit_cost, line_total")
-        .in("sale_id", todaySaleIds)
-    : { data: [], error: null };
+  const saleItemsData = await fetchSaleItemsInChunks(
+    client,
+    todaySaleIds,
+    "sale_id, quantity"
+  );
 
-  if (saleItemsResult.error) throw saleItemsResult.error;
+  let grossProfitData = 0;
+  if (includeProfit) {
+    const { data, error } = await client.rpc("get_business_profit", {
+      p_business_id: businessId,
+      p_start: startIso,
+      p_end: endIso,
+    });
+    if (error) throw error;
+    grossProfitData = data;
+  }
 
   const customerNames = await loadCustomerNames(client, businessId, recentSalesResult.data);
 
@@ -161,14 +170,11 @@ export async function getDashboardSummary(businessId) {
     (total, expense) => total + toNumber(expense.amount),
     0
   );
-  const estimatedGrossProfit = saleItemsResult.data.reduce(
-    (total, item) => total + toNumber(item.line_total) - toNumber(item.unit_cost) * item.quantity,
-    0
-  );
+  const estimatedGrossProfit = toNumber(grossProfitData);
 
   return {
     todaySales: todaySalesResult.data.reduce((total, sale) => total + toNumber(sale.total), 0),
-    todayItemCount: saleItemsResult.data.reduce((total, item) => total + item.quantity, 0),
+    todayItemCount: saleItemsData.reduce((total, item) => total + item.quantity, 0),
     totalExpenses,
     expenseCount: expensesResult.data.length,
     estimatedProfit: estimatedGrossProfit - totalExpenses,

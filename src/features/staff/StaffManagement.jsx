@@ -13,6 +13,7 @@ import {
   X,
   Trash2,
   Lock,
+  Unlock,
   ChevronDown,
   ChevronUp,
   AlertCircle,
@@ -36,6 +37,7 @@ import {
   generateStaffId,
   generateStaffPassword,
   updateStaffPassword,
+  unlockStaffAccount,
 } from "../../services/staffService.js";
 import { showToast } from "../../lib/toast.js";
 import { useBackButtonModal } from "../../hooks/useBackButtonModal.js";
@@ -147,6 +149,17 @@ export function StaffManagement({
     } catch (err) {
       console.error("[StaffManagement] Failed to remove staff:", err);
       showToast("Unable to remove staff member", { type: "error" });
+    }
+  };
+
+  const handleUnlockStaff = async (member) => {
+    try {
+      await unlockStaffAccount(businessId, member.id || member.staffId);
+      showToast(`Account for ${member.fullName} unlocked.`, { type: "success" });
+      loadMembers();
+    } catch (err) {
+      console.error("[StaffManagement] Failed to unlock account:", err);
+      showToast(err?.message || "Unable to unlock account", { type: "warn" });
     }
   };
 
@@ -352,6 +365,8 @@ export function StaffManagement({
                 {members.map((member) => {
                   const isCurrent = member.isCurrent;
                   const canEditThisMember = permissions?.canManageStaff && !isCurrent;
+                  const isLocked = Boolean(member.isLocked);
+                  const remainingMinutes = member.remainingMinutes || 1;
 
                   return (
                     <div
@@ -373,6 +388,12 @@ export function StaffManagement({
                             {isCurrent && (
                               <span className="rounded-md bg-slate-100 px-1.5 py-0.2 text-[10px] font-bold text-slate-500">
                                 You
+                              </span>
+                            )}
+                            {isLocked && (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 border border-amber-300 px-1.5 py-0.5 text-[11px] font-bold text-amber-900 animate-pulse">
+                                <Lock className="h-3 w-3 text-amber-700" />
+                                <span>Locked ({remainingMinutes}m)</span>
                               </span>
                             )}
                             {member.staffId && (
@@ -401,6 +422,18 @@ export function StaffManagement({
                       </div>
 
                       <div className="flex items-center gap-2 justify-end">
+                        {isLocked && canEditThisMember && (
+                          <button
+                            type="button"
+                            onClick={() => handleUnlockStaff(member)}
+                            title="Unlock Staff Account"
+                            className="inline-flex items-center gap-1 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 text-xs font-bold transition shadow-xs"
+                          >
+                            <Unlock className="h-3.5 w-3.5" />
+                            <span>Unlock</span>
+                          </button>
+                        )}
+
                         <RoleDropdownSelector
                           currentRole={member.role}
                           onChange={(newRole) => handleRoleChange(member.id, newRole)}
@@ -414,7 +447,7 @@ export function StaffManagement({
                               type="button"
                               onClick={() => {
                                 setPasswordEditMember(member);
-                                setNewPasswordInput(member.password || "");
+                                setNewPasswordInput(member.password?.startsWith("$2") ? "" : (member.password || ""));
                                 setShowResetPass(false);
                               }}
                               title="Manage / View Password"

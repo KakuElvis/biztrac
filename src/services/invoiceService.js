@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from "../lib/supabase.js";
+import { STORES, putItem, getItem } from "../lib/offlineStore.js";
 
 const LOCAL_STORAGE_KEY_PREFIX = "biztrac_invoices_";
 
@@ -61,8 +62,19 @@ export function getInitialInvoice(business = {}) {
   };
 }
 
-function getLocalInvoices(businessId) {
+async function getLocalInvoices(businessId) {
   if (typeof window === "undefined" || !businessId) return [];
+  // 1. Try IndexedDB cache first (no 5MB origin quota limit)
+  try {
+    const record = await getItem(STORES.CACHED_INVOICES, businessId);
+    if (record?.data && Array.isArray(record.data)) {
+      return record.data;
+    }
+  } catch {
+    // Ignore IndexedDB error and fallback
+  }
+
+  // 2. Fallback to localStorage
   try {
     const raw = localStorage.getItem(`${LOCAL_STORAGE_KEY_PREFIX}${businessId}`);
     return raw ? JSON.parse(raw) : [];
@@ -71,8 +83,16 @@ function getLocalInvoices(businessId) {
   }
 }
 
-function saveLocalInvoices(businessId, docs) {
+async function saveLocalInvoices(businessId, docs) {
   if (typeof window === "undefined" || !businessId) return;
+  // 1. Persist to IndexedDB
+  try {
+    await putItem(STORES.CACHED_INVOICES, { id: businessId, data: docs, updatedAt: Date.now() });
+  } catch {
+    // Ignore IndexedDB error
+  }
+
+  // 2. Also keep localStorage copy as fallback for small caches
   try {
     localStorage.setItem(`${LOCAL_STORAGE_KEY_PREFIX}${businessId}`, JSON.stringify(docs));
   } catch {
@@ -110,7 +130,7 @@ export async function listInvoices(businessId) {
         }));
 
         // Keep local cache synced
-        saveLocalInvoices(businessId, mapped);
+        await saveLocalInvoices(businessId, mapped);
         return mapped;
       }
     } catch {
@@ -118,7 +138,7 @@ export async function listInvoices(businessId) {
     }
   }
 
-  return getLocalInvoices(businessId);
+  return await getLocalInvoices(businessId);
 }
 
 export async function saveInvoiceRecord(businessId, doc) {
@@ -147,7 +167,6 @@ export async function saveInvoiceRecord(businessId, doc) {
   if (isSupabaseConfigured && supabase) {
     try {
       const payload = {
-        business_id: businessId,
         doc_number: cleanDoc.doc_number,
         doc_type: cleanDoc.doc_type,
         status: cleanDoc.status,
@@ -166,51 +185,28 @@ export async function saveInvoiceRecord(businessId, doc) {
         bank_momo_details: cleanDoc.bank_momo_details || "",
         notes: cleanDoc.notes || "",
       };
-
-      if (cleanDoc.id && !String(cleanDoc.id).startsWith("local-")) {
-        const { error: updateErr } = await supabase
-          .from("billing_documents")
-          .update(payload)
-          .eq("id", cleanDoc.id)
-          .eq("business_id", businessId);
-
-        if (updateErr) throw updateErr;
-
-        // Replace items
-        await supabase.from("billing_document_items").delete().eq("document_id", cleanDoc.id);
-        savedId = cleanDoc.id;
-      } else {
-        const { data: inserted, error: insertErr } = await supabase
-          .from("billing_documents")
-          .insert(payload)
-          .select("id")
-          .single();
-
-        if (insertErr) throw insertErr;
-        savedId = inserted.id;
-      }
-
-      if (savedId) {
-        const itemsPayload = cleanDoc.items.map((i) => ({
-          document_id: savedId,
+      const itemsPayload = cleanDoc.items.map((i) => ({
           product_id: i.product_id || null,
           description: i.description || "Item",
           quantity: Number(i.quantity || 1),
           unit_price: Number(i.unit_price || 0),
           line_total: Number(i.line_total || 0),
-        }));
-
-        const { error: itemsErr } = await supabase
-          .from("billing_document_items")
-          .insert(itemsPayload);
-
-        if (itemsErr) console.warn("[invoiceService] items error:", itemsErr);
-      }
+      }));
+      const existingId = cleanDoc.id && !String(cleanDoc.id).startsWith("local-") ? cleanDoc.id : null;
+      const { data: remoteId, error: saveError } = await supabase.rpc("save_billing_document", {
+        p_business_id: businessId,
+        p_document_id: existingId,
+        p_document: payload,
+        p_items: itemsPayload,
+      });
+      if (saveError) throw saveError;
+      savedId = remoteId;
     } catch (dbErr) {
-      console.warn("[invoiceService] Supabase save failed, saving to local cache:", dbErr.message);
-      if (!savedId) {
-        savedId = `local-${Date.now()}`;
-      }
+      console.warn("[invoiceService] Supabase save failed; preserving a local draft:", dbErr.message);
+      savedId = `local-${Date.now()}`;
+      cleanDoc.status = "draft";
+      cleanDoc.sync_status = "needs_sync";
+      cleanDoc.sync_error = dbErr.message || "Failed to sync to database";
     }
   } else {
     if (!savedId) {
@@ -225,7 +221,7 @@ export async function saveInvoiceRecord(businessId, doc) {
   };
 
   // Update local storage
-  const localList = getLocalInvoices(businessId);
+  const localList = await getLocalInvoices(businessId);
   const existingIdx = localList.findIndex((d) => d.id === finalDoc.id || d.doc_number === finalDoc.doc_number);
   let updatedList;
   if (existingIdx >= 0) {
@@ -234,7 +230,7 @@ export async function saveInvoiceRecord(businessId, doc) {
   } else {
     updatedList = [finalDoc, ...localList];
   }
-  saveLocalInvoices(businessId, updatedList);
+  await saveLocalInvoices(businessId, updatedList);
 
   return finalDoc;
 }
@@ -244,37 +240,56 @@ export async function deleteInvoiceRecord(businessId, docId) {
 
   if (isSupabaseConfigured && supabase && !String(docId).startsWith("local-")) {
     try {
-      await supabase
+      const { error } = await supabase
         .from("billing_documents")
         .delete()
         .eq("id", docId)
         .eq("business_id", businessId);
-    } catch {
-      // Local deletion proceeds regardless
+      if (error) throw error;
+    } catch (err) {
+      console.warn("[invoiceService] Remote delete failed:", err?.message || err);
+      const localList = (await getLocalInvoices(businessId)).filter((d) => d.id !== docId);
+      await saveLocalInvoices(businessId, localList);
+      throw new Error(`Remote invoice delete failed: ${err.message || err}. Removed locally.`, { cause: err });
     }
   }
 
-  const localList = getLocalInvoices(businessId).filter((d) => d.id !== docId);
-  saveLocalInvoices(businessId, localList);
+  const localList = (await getLocalInvoices(businessId)).filter((d) => d.id !== docId);
+  await saveLocalInvoices(businessId, localList);
 }
 
 export async function updateInvoiceStatus(businessId, docId, nextStatus) {
   if (!businessId || !docId) return;
 
+  let remoteError = null;
   if (isSupabaseConfigured && supabase && !String(docId).startsWith("local-")) {
     try {
-      await supabase
+      const { error } = await supabase
         .from("billing_documents")
         .update({ status: nextStatus, updated_at: new Date().toISOString() })
         .eq("id", docId)
         .eq("business_id", businessId);
-    } catch {
-      // Fallback to local
+      if (error) throw error;
+    } catch (err) {
+      console.warn("[invoiceService] Remote status update failed; updating local copy:", err?.message || err);
+      remoteError = err;
     }
   }
 
-  const localList = getLocalInvoices(businessId).map((d) =>
-    d.id === docId ? { ...d, status: nextStatus, updated_at: new Date().toISOString() } : d
+  const localList = (await getLocalInvoices(businessId)).map((d) =>
+    d.id === docId
+      ? {
+          ...d,
+          status: nextStatus,
+          sync_status: remoteError ? "needs_sync" : d.sync_status,
+          sync_error: remoteError ? (remoteError.message || "Status sync failed") : null,
+          updated_at: new Date().toISOString(),
+        }
+      : d
   );
-  saveLocalInvoices(businessId, localList);
+  await saveLocalInvoices(businessId, localList);
+
+  if (remoteError) {
+    throw new Error(`Invoice status updated locally, but remote sync failed: ${remoteError.message || remoteError}`, { cause: remoteError });
+  }
 }

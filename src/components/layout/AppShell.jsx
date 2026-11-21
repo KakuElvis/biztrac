@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   BarChart3,
   Boxes,
@@ -15,9 +16,13 @@ import {
   EyeOff,
   Lock,
   FileText,
+  AlertTriangle,
+  RefreshCw,
+  Trash2,
+  X,
 } from "lucide-react";
 import { AppLogo } from "../../components/common/AppLogo.jsx";
-import { classNames } from "../../lib/formatters.js";
+import { classNames, formatCurrency } from "../../lib/formatters.js";
 import { PwaBanner, PwaInstallButton } from "../pwa/PwaBanner.jsx";
 
 const navItems = [
@@ -41,13 +46,17 @@ export function AppShell({
   onSignOut,
   queuedCount = 0,
   conflictedCount = 0,
+  conflictedSales = [],
   onDismissConflicted,
+  onRetryConflicted,
+  onDismissSingleConflicted,
   isSyncing = false,
   onTriggerSync,
   pwaState = {},
   permissions,
   onSetPreviewRole,
 }) {
+  const [showConflictModal, setShowConflictModal] = useState(false);
   const { canInstall, isInstalled, isIOS, needRefresh, onInstallPwa, onUpdatePwa } = pwaState;
   const isCashier = Boolean(permissions?.isCashier);
 
@@ -256,7 +265,7 @@ export function AppShell({
             ) : null}
 
             {conflictedCount > 0 ? (
-              <div className="flex items-center justify-between gap-3 rounded-3xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900 shadow-sm">
                 <div className="flex items-center gap-2">
                   <span className="grid h-6 min-w-6 place-items-center rounded-full bg-rose-600 px-1 text-xs font-black text-white">
                     {conflictedCount}
@@ -267,14 +276,24 @@ export function AppShell({
                       : `${conflictedCount} offline sales encountered conflicts.`}
                   </span>
                 </div>
-                {onDismissConflicted ? (
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={onDismissConflicted}
-                    className="rounded-xl bg-rose-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-rose-700"
+                    type="button"
+                    onClick={() => setShowConflictModal(true)}
+                    className="rounded-xl border border-rose-300 bg-white px-3 py-1.5 text-xs font-black text-rose-800 shadow-sm transition hover:bg-rose-100/50"
                   >
-                    Dismiss
+                    Review Conflicts
                   </button>
-                ) : null}
+                  {onDismissConflicted ? (
+                    <button
+                      type="button"
+                      onClick={onDismissConflicted}
+                      className="rounded-xl bg-rose-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-rose-700"
+                    >
+                      Dismiss All
+                    </button>
+                  ) : null}
+                </div>
               </div>
             ) : null}
           </div>
@@ -311,6 +330,119 @@ export function AppShell({
           ))}
         </div>
       </nav>
+
+      {showConflictModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="flex max-h-[85vh] w-full max-w-xl flex-col rounded-3xl bg-white shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <div className="flex items-center gap-2.5">
+                <div className="grid h-9 w-9 place-items-center rounded-xl bg-rose-100 text-rose-700">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">Review Conflicted Sales</h3>
+                  <p className="text-xs text-slate-500">{conflictedCount} sale(s) could not automatically sync</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowConflictModal(false)}
+                className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {conflictedSales.length === 0 ? (
+                <p className="text-center text-sm text-slate-500 py-8">No conflicted sales found.</p>
+              ) : (
+                conflictedSales.map((sale) => {
+                  const payload = sale.payload || {};
+                  const lines = payload.lines || [];
+                  const customerName = payload.customer?.name || "Walk-in Customer";
+                  const totalAmount = lines.reduce((sum, l) => sum + (Number(l.total ?? l.lineTotal) || 0), 0);
+
+                  return (
+                    <div
+                      key={sale.id}
+                      className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2.5 text-xs"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="font-bold text-slate-900">{customerName}</p>
+                          <p className="font-mono text-[11px] text-slate-500">
+                            {new Date(sale.conflictedAt || sale.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+                        <span className="font-black text-slate-900 text-sm">
+                          {formatCurrency(totalAmount)}
+                        </span>
+                      </div>
+
+                      <div className="rounded-xl border border-rose-200 bg-rose-50/80 p-2 text-rose-800 font-medium">
+                        ⚠️ Reason: {sale.conflictError || "Stock depleted on server."}
+                      </div>
+
+                      <div className="text-[11px] text-slate-600">
+                        <span className="font-semibold">Items: </span>
+                        {lines.map((l) => `${l.quantity}x ${l.product?.name || l.name || "Item"}`).join(", ") || "No items"}
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await onRetryConflicted?.(sale.id);
+                            if (conflictedSales.length <= 1) setShowConflictModal(false);
+                          }}
+                          className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5 text-palm" />
+                          <span>Retry Sync</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await onDismissSingleConflicted?.(sale.id);
+                            if (conflictedSales.length <= 1) setShowConflictModal(false);
+                          }}
+                          className="flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 py-1.5 font-bold text-rose-700 shadow-sm transition hover:bg-rose-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                          <span>Dismiss</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-100 px-6 py-3.5 bg-slate-50 rounded-b-3xl">
+              {onDismissConflicted && conflictedSales.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDismissConflicted();
+                    setShowConflictModal(false);
+                  }}
+                  className="text-xs font-bold text-rose-600 hover:text-rose-700 underline"
+                >
+                  Dismiss All Conflicts
+                </button>
+              ) : <div />}
+              <button
+                type="button"
+                onClick={() => setShowConflictModal(false)}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white hover:bg-slate-800"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

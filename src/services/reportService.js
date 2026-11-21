@@ -3,6 +3,7 @@ import {
   toNumber,
   shortReference,
   loadCustomerNames,
+  fetchSaleItemsInChunks,
 } from "./serviceUtils.js";
 
 function getDateKey(date) {
@@ -178,7 +179,8 @@ export async function getReportSummary(businessId, { range = "weekly", startDate
       .from("customer_balances")
       .select("customer_id, customer_name, total_debt, latest_sale_at")
       .eq("business_id", businessId)
-      .order("latest_sale_at", { ascending: false }),
+      .order("latest_sale_at", { ascending: false })
+      .limit(100),
   ]);
 
   if (salesResult.error) throw salesResult.error;
@@ -206,29 +208,33 @@ export async function getReportSummary(businessId, { range = "weekly", startDate
   });
 
   const saleIds = salesResult.data.map((sale) => sale.id);
-  const saleItemsResult = saleIds.length
-    ? await client
-        .from("sale_items")
-        .select("product_id, product_name, quantity, line_total")
-        .in("sale_id", saleIds)
-    : { data: [], error: null };
-
-  if (saleItemsResult.error) throw saleItemsResult.error;
+  const saleItemsData = await fetchSaleItemsInChunks(
+    client,
+    saleIds,
+    "product_id, product_name, quantity, line_total"
+  );
+  const { data: grossProfitData, error: profitError } = await client.rpc("get_business_profit", {
+    p_business_id: businessId,
+    p_start: start.toISOString(),
+    p_end: end.toISOString(),
+  });
+  if (profitError) throw profitError;
 
   let debtors = [];
   if (!debtorBalancesResult.error && debtorBalancesResult.data) {
     const customerIds = debtorBalancesResult.data.map((d) => d.customer_id).filter(Boolean);
     const customerDueDateMap = new Map();
     if (customerIds.length > 0) {
-      const { data: creditSales } = await client
-        .from("sales")
-        .select("customer_id, due_date, sold_at")
-        .eq("business_id", businessId)
-        .in("customer_id", customerIds)
-        .order("sold_at", { ascending: false });
-
-      if (creditSales) {
-        creditSales.forEach((s) => {
+      for (let offset = 0; offset < customerIds.length; offset += 100) {
+        const customerChunk = customerIds.slice(offset, offset + 100);
+        const { data: creditSales, error: creditSalesError } = await client
+          .from("sales")
+          .select("customer_id, due_date, sold_at")
+          .eq("business_id", businessId)
+          .in("customer_id", customerChunk)
+          .order("sold_at", { ascending: false });
+        if (creditSalesError) throw creditSalesError;
+        (creditSales || []).forEach((s) => {
           if (!customerDueDateMap.has(s.customer_id)) {
             const dueDateObj = resolveDueDate(s.due_date, s.sold_at);
             if (dueDateObj) customerDueDateMap.set(s.customer_id, dueDateObj);
@@ -272,6 +278,7 @@ export async function getReportSummary(businessId, { range = "weekly", startDate
   const series = [...seriesByDate.values()];
   const salesTotal = series.reduce((sum, point) => sum + point.sales, 0);
   const expenseTotal = series.reduce((sum, point) => sum + point.expenses, 0);
+  const grossProfitTotal = toNumber(grossProfitData);
 
   return {
     period: range,
@@ -280,13 +287,13 @@ export async function getReportSummary(businessId, { range = "weekly", startDate
     series,
     salesTotal,
     expenseTotal,
-    profitTotal: salesTotal - expenseTotal,
+    profitTotal: grossProfitTotal - expenseTotal,
     subtotalExTaxTotal,
     nhilTotal,
     getfundTotal,
     vatTotal,
     taxTotal,
-    bestSellers: summarizeBestSellers(saleItemsResult.data),
+    bestSellers: summarizeBestSellers(saleItemsData),
     debtors,
   };
 }
@@ -295,13 +302,16 @@ export async function getProductStockTimeline(businessId, productId) {
   const client = requireSupabase();
 
   const [productRes, restocksRes, saleItemsRes] = await Promise.all([
-    client.from("products").select("*").eq("id", productId).eq("business_id", businessId).single(),
-    client
-      .from("product_restocks")
-      .select("*")
-      .eq("product_id", productId)
-      .eq("business_id", businessId)
-      .order("created_at", { ascending: false }),
+    client.rpc("list_manager_products", {
+      p_business_id: businessId,
+      p_product_id: productId,
+      p_offset: 0,
+      p_limit: 1,
+    }),
+    client.rpc("list_manager_product_restocks", {
+      p_business_id: businessId,
+      p_product_id: productId,
+    }),
     client
       .from("sale_items")
       .select("id, sale_id, quantity, unit_price, line_total, created_at")
@@ -311,7 +321,8 @@ export async function getProductStockTimeline(businessId, productId) {
 
   if (productRes.error) throw productRes.error;
 
-  const product = productRes.data;
+  const product = Array.isArray(productRes.data) ? productRes.data[0] : null;
+  if (!product) throw new Error("Product was not found or manager access is required.");
   const restocks = restocksRes.data || [];
   const sales = saleItemsRes.data || [];
 

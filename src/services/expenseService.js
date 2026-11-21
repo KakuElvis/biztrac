@@ -71,13 +71,14 @@ function toExpenseRow(expense, userId) {
   };
 }
 
-export async function listExpenses(businessId) {
+export async function listExpenses(businessId, { limit = 500 } = {}) {
   const { data, error } = await requireSupabase()
     .from("expenses")
     .select("*")
     .eq("business_id", businessId)
     .order("incurred_on", { ascending: false })
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(limit);
 
   if (error) throw error;
   return data.map(toExpense);

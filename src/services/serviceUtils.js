@@ -41,3 +41,29 @@ export async function loadCustomerNames(client, businessId, rows) {
 
   return new Map(data.map((customer) => [customer.id, customer.name]));
 }
+
+/**
+ * Batches sale_items queries into chunks of at most 100 IDs to prevent
+ * PostgREST HTTP 414 Request-URI Too Large errors on high-volume stores.
+ */
+export async function fetchSaleItemsInChunks(client, saleIds, selectFields = "*") {
+  if (!Array.isArray(saleIds) || !saleIds.length) return [];
+  const CHUNK_SIZE = 100;
+  const chunks = [];
+  for (let i = 0; i < saleIds.length; i += CHUNK_SIZE) {
+    chunks.push(saleIds.slice(i, i + CHUNK_SIZE));
+  }
+
+  const results = await Promise.all(
+    chunks.map((chunk) =>
+      client.from("sale_items").select(selectFields).in("sale_id", chunk)
+    )
+  );
+
+  const allItems = [];
+  for (const res of results) {
+    if (res.error) throw res.error;
+    if (Array.isArray(res.data)) allItems.push(...res.data);
+  }
+  return allItems;
+}
