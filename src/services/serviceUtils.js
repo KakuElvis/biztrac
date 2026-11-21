@@ -27,6 +27,18 @@ export function formatPaymentMethod(value) {
   return labels[value] || "Sale";
 }
 
+export async function fetchAllPages(buildQuery, pageSize = 1000) {
+  const rows = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await buildQuery(offset, offset + pageSize - 1);
+    if (error) throw error;
+    const page = Array.isArray(data) ? data : [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return { data: rows, error: null };
+}
+
 export async function loadCustomerNames(client, businessId, rows) {
   const customerIds = [...new Set(rows.map((row) => row.customer_id).filter(Boolean))];
   if (!customerIds.length) return new Map();

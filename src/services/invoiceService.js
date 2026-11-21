@@ -12,8 +12,9 @@ export function generateDocNumber(type = "invoice") {
   };
   const prefix = prefixMap[type] || "DOC";
   const year = new Date().getFullYear();
-  const random = Math.floor(1000 + Math.random() * 9000);
-  return `BT-${prefix}-${year}-${random}`;
+  const nonce = globalThis.crypto?.randomUUID?.().replaceAll("-", "").slice(0, 12).toUpperCase()
+    || `${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  return `BT-${prefix}-${year}-${nonce}`;
 }
 
 export function getInitialInvoice(business = {}) {
@@ -129,9 +130,18 @@ export async function listInvoices(businessId) {
           })),
         }));
 
-        // Keep local cache synced
-        await saveLocalInvoices(businessId, mapped);
-        return mapped;
+        // Preserve pending offline drafts while refreshing confirmed remote records.
+        const localDocs = await getLocalInvoices(businessId);
+        const pendingDocs = localDocs.filter((doc) => doc.sync_status === "needs_sync");
+        const remoteIds = new Set(mapped.map((doc) => doc.id));
+        const pendingNumbers = new Set(pendingDocs.map((doc) => doc.doc_number));
+        const merged = [
+          ...pendingDocs,
+          ...mapped.filter((doc) => !pendingNumbers.has(doc.doc_number)),
+          ...localDocs.filter((doc) => !doc.sync_status && !remoteIds.has(doc.id) && !pendingNumbers.has(doc.doc_number)),
+        ];
+        await saveLocalInvoices(businessId, merged);
+        return merged;
       }
     } catch {
       // Fall through to local cache on error/offline

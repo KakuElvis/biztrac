@@ -204,9 +204,12 @@ export function StaffManagement({
       });
       setShowCreatedPassword(false);
 
-      showToast(`${added.fullName} added (ID: ${added.staffId})`, {
-        type: "success",
-      });
+      showToast(
+        added.syncStatus === "needs_sync"
+          ? `${added.fullName} saved on this device only. Reconnect and add the account again to sync it.`
+          : `${added.fullName} added (ID: ${added.staffId})`,
+        { type: added.syncStatus === "needs_sync" ? "error" : "success" }
+      );
     } catch (err) {
       console.error("[StaffManagement] Failed to add staff:", err);
       setFormError(err.message || "Unable to add staff member");

@@ -12,9 +12,19 @@ export const compactCurrency = new Intl.NumberFormat("en-GH", {
   maximumFractionDigits: 1,
 });
 
-export function formatCurrency(value) {
+export function formatCurrency(value, currencyCode = "GHS", locale) {
   const num = Number(value);
-  return currency.format(Number.isFinite(num) ? num : 0);
+  const code = String(currencyCode || "GHS").toUpperCase();
+  try {
+    return new Intl.NumberFormat(locale || (code === "GHS" ? "en-GH" : undefined), {
+      style: "currency",
+      currency: code,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(Number.isFinite(num) ? num : 0);
+  } catch {
+    return currency.format(Number.isFinite(num) ? num : 0);
+  }
 }
 
 export function formatCompactCurrency(value) {
@@ -24,11 +34,11 @@ export function formatCompactCurrency(value) {
 
 export function formatWhatsAppPhone(phone, defaultCountry = "233") {
   if (!phone) return "";
-  let raw = String(phone).trim();
-  if (raw.startsWith("+")) raw = raw.slice(1);
+  const raw = String(phone).trim();
+  const international = raw.startsWith("+") || raw.startsWith("00");
   let digits = raw.replace(/\D/g, "");
   if (digits.startsWith("00")) digits = digits.slice(2);
-  if (raw.startsWith("+") || digits.startsWith(defaultCountry)) return digits;
+  if (international || digits.startsWith(defaultCountry)) return digits;
   if (digits.startsWith("0")) return `${defaultCountry}${digits.slice(1)}`;
   return `${defaultCountry}${digits}`;
 }

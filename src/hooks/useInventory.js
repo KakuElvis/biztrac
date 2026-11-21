@@ -106,6 +106,11 @@ export function useInventory(repository, businessId) {
           event: "*",
           schema: "public",
           table: "products",
+          select: [
+            "id", "business_id", "name", "category", "sku", "selling_price",
+            "quantity", "low_stock_limit", "supplier", "size", "colour",
+            "brand", "item_type", "tax_treatment", "created_at", "updated_at",
+          ],
           filter: `business_id=eq.${businessId}`,
         },
         (payload) => {

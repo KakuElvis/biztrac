@@ -214,9 +214,7 @@ export async function listStaffMembers(businessId, currentUser = null) {
     // 3. Also fetch cloud staff accounts from staff_accounts table if present
     try {
       const { data: cloudStaff, error: csError } = await client
-        .from("staff_accounts")
-        .select("id, business_id, staff_id, password_hash, full_name, phone, email, role, created_at, failed_login_attempts, locked_until")
-        .eq("business_id", businessId);
+        .rpc("list_manager_staff_accounts", { p_business_id: businessId });
 
       if (!csError && Array.isArray(cloudStaff)) {
         cloudStaff.forEach((cs) => {
@@ -275,19 +273,25 @@ export async function updateStaffRole(businessId, userId, newRole) {
   if (isSupabaseConfigured) {
     try {
       const client = requireSupabase();
-      await client
+      const memberUpdate = await client
         .from("business_members")
         .update({ role: normRole })
         .eq("business_id", businessId)
         .eq("user_id", userId);
+      if (memberUpdate.error) throw memberUpdate.error;
 
-      await client
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+      let staffUpdate = client
         .from("staff_accounts")
         .update({ role: normRole })
-        .eq("business_id", businessId)
-        .eq("staff_id", userId);
+        .eq("business_id", businessId);
+      staffUpdate = isUuid
+        ? staffUpdate.or(`id.eq.${userId},staff_id.eq.${userId}`)
+        : staffUpdate.eq("staff_id", userId);
+      const { error: staffUpdateError } = await staffUpdate;
+      if (staffUpdateError) throw staffUpdateError;
     } catch (err) {
-      console.warn("[staffService] Supabase error in updateStaffRole, falling back locally:", err?.message || err);
+      throw new Error(`Role change was not saved to the server: ${err?.message || err}`, { cause: err });
     }
   }
 
@@ -352,10 +356,11 @@ export async function updateStaffPassword(businessId, userId, newPassword) {
         } else {
           query = query.eq("staff_id", userId);
         }
-        await query;
+        const { error: updateError } = await query;
+        if (updateError) throw updateError;
       }
     } catch (err) {
-      console.warn("[staffService] Failed remote password update:", err?.message || err);
+      throw new Error(`Password change was not saved to the server: ${err?.message || err}`, { cause: err });
     }
   }
 
@@ -417,10 +422,11 @@ export async function unlockStaffAccount(businessId, userId) {
         } else {
           query = query.eq("staff_id", userId);
         }
-        await query;
+        const { error: updateError } = await query;
+        if (updateError) throw updateError;
       }
     } catch (err) {
-      console.warn("[staffService] Failed remote staff account unlock:", err?.message || err);
+      throw new Error(`Staff account was not unlocked on the server: ${err?.message || err}`, { cause: err });
     }
   }
 
@@ -450,19 +456,25 @@ export async function removeStaffMember(businessId, userId) {
   if (isSupabaseConfigured) {
     try {
       const client = requireSupabase();
-      await client
+      const { error: memberDeleteError } = await client
         .from("business_members")
         .delete()
         .eq("business_id", businessId)
         .eq("user_id", userId);
+      if (memberDeleteError) throw memberDeleteError;
 
-      await client
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+      let staffDelete = client
         .from("staff_accounts")
         .delete()
-        .eq("business_id", businessId)
-        .eq("staff_id", userId);
+        .eq("business_id", businessId);
+      staffDelete = isUuid
+        ? staffDelete.or(`id.eq.${userId},staff_id.eq.${userId}`)
+        : staffDelete.eq("staff_id", userId);
+      const { error: staffDeleteError } = await staffDelete;
+      if (staffDeleteError) throw staffDeleteError;
     } catch (err) {
-      console.warn("[staffService] Supabase error in removeStaffMember, falling back locally:", err?.message || err);
+      throw new Error(`Staff removal was not saved to the server: ${err?.message || err}`, { cause: err });
     }
   }
 
@@ -552,20 +564,26 @@ export async function addStaffMember(
   if (isSupabaseConfigured) {
     try {
       const client = requireSupabase();
-      await client.from("staff_accounts").upsert(
-        {
-          business_id: businessId,
-          staff_id: cleanStaffId,
-          password_hash: cleanPassword,
-          full_name: newMember.fullName,
-          phone: newMember.phone || null,
-          email: newMember.email || null,
-          role: normRole,
-        },
-        { onConflict: "business_id, staff_id" }
-      );
+      const { data, error } = await client.rpc("save_staff_account", {
+        p_business_id: businessId,
+        p_staff_id: cleanStaffId,
+        p_password: cleanPassword,
+        p_full_name: newMember.fullName,
+        p_phone: newMember.phone || null,
+        p_email: newMember.email || null,
+        p_role: normRole,
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Staff account could not be saved.");
     } catch (err) {
       console.warn("[staffService] Supabase sync to staff_accounts skipped:", err?.message || err);
+      newMember.syncStatus = "needs_sync";
+      writeLocalStaff(businessId, readLocalStaff(businessId).map((member) =>
+        member.id === tempId ? { ...member, syncStatus: "needs_sync" } : member
+      ));
+      writeGlobalStaffRegistry(readGlobalStaffRegistry().map((member) =>
+        member.id === tempId ? { ...member, syncStatus: "needs_sync" } : member
+      ));
     }
   }
 

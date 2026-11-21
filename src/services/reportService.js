@@ -4,6 +4,7 @@ import {
   shortReference,
   loadCustomerNames,
   fetchSaleItemsInChunks,
+  fetchAllPages,
 } from "./serviceUtils.js";
 
 function getDateKey(date) {
@@ -163,18 +164,20 @@ export async function getReportSummary(businessId, { range = "weekly", startDate
   );
 
   const [salesResult, expensesResult, debtorBalancesResult] = await Promise.all([
-    client
+    fetchAllPages((from, to) => client
       .from("sales")
       .select("id, reference, customer_id, total, amount_paid, sold_at, subtotal_ex_tax, total_nhil, total_getfund, total_vat, total_tax")
       .eq("business_id", businessId)
       .gte("sold_at", start.toISOString())
-      .lt("sold_at", end.toISOString()),
-    client
+      .lt("sold_at", end.toISOString())
+      .range(from, to)),
+    fetchAllPages((from, to) => client
       .from("expenses")
       .select("amount, incurred_on")
       .eq("business_id", businessId)
       .gte("incurred_on", startDateKey)
-      .lte("incurred_on", endDateKey),
+      .lte("incurred_on", endDateKey)
+      .range(from, to)),
     client
       .from("customer_balances")
       .select("customer_id, customer_name, total_debt, latest_sale_at")

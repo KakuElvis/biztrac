@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { Badge } from "../../components/common/Badge.jsx";
 import { Button } from "../../components/common/Button.jsx";
-import { formatCurrency } from "../../lib/formatters.js";
+import { formatCurrency as formatCurrencyDefault, formatWhatsAppPhone } from "../../lib/formatters.js";
 import { formatReceiptDate, printThermalReceipt } from "../../lib/receiptHtml.js";
 import { showToast } from "../../lib/toast.js";
 import { calculateSaleTaxes } from "../../lib/taxCalculator.js";
@@ -56,12 +56,13 @@ function toReceiptLine(line) {
 
 function buildReceiptText(receipt, business) {
   if (!receipt) return "";
+  const money = (value) => formatCurrency(value, business?.currency);
   const businessName = business?.name || "BizTrac";
   const businessDetails = [business?.phone, business?.location].filter(Boolean).join(" | ");
   const lines = (receipt.lines || [])
     .map(
       (line) =>
-        `${line.quantity} x ${line.name} @ ${formatCurrency(line.unitPrice)} = ${formatCurrency(
+        `${line.quantity} x ${line.name} @ ${money(line.unitPrice)} = ${money(
           line.total
         )}`
     )
@@ -104,18 +105,18 @@ function buildReceiptText(receipt, business) {
     "",
     lines,
     "",
-    hasTax ? `Net Subtotal (ex-tax): ${formatCurrency(receipt.subtotalExTax ?? (receipt.total - receipt.totalTax))}` : "",
-    hasTax ? `NHIL (${nhilRate}%): ${formatCurrency(receipt.totalNhil || 0)}` : "",
-    hasTax ? `GETFund (${getfundRate}%): ${formatCurrency(receipt.totalGetfund || 0)}` : "",
-    hasTax ? `VAT (${vatRate}%): ${formatCurrency(receipt.totalVat || 0)}` : "",
-    hasTax ? `Total Tax (Act 1151): ${formatCurrency(receipt.totalTax)}` : "",
-    `Total: ${formatCurrency(receipt.total || 0)}`,
-    hasCashChange ? `Cash Tendered: ${formatCurrency(receipt.amountTendered)}` : "",
-    hasCashChange && receipt.changeDue !== undefined ? `Change: ${formatCurrency(receipt.changeDue)}` : "",
-    isMomoOrBank && receipt.amountPaid !== undefined ? `Amount Paid (${receipt.paymentType}): ${formatCurrency(momoOrBankPaid)}` : "",
-    isMomoOrBank && receipt.amountPaid !== undefined && receipt.amountPaid < receipt.total ? `Balance Due: ${formatCurrency(momoOrBankBalance)}` : "",
-    isCreditOrPartial ? `Amount Paid: ${formatCurrency(amountPaid)}` : "",
-    isCreditOrPartial ? `Balance Due: ${formatCurrency(balanceDue)}` : "",
+    hasTax ? `Net Subtotal (ex-tax): ${money(receipt.subtotalExTax ?? (receipt.total - receipt.totalTax))}` : "",
+    hasTax ? `NHIL (${nhilRate}%): ${money(receipt.totalNhil || 0)}` : "",
+    hasTax ? `GETFund (${getfundRate}%): ${money(receipt.totalGetfund || 0)}` : "",
+    hasTax ? `VAT (${vatRate}%): ${money(receipt.totalVat || 0)}` : "",
+    hasTax ? `Total Tax (Act 1151): ${money(receipt.totalTax)}` : "",
+    `Total: ${money(receipt.total || 0)}`,
+    hasCashChange ? `Cash Tendered: ${money(receipt.amountTendered)}` : "",
+    hasCashChange && receipt.changeDue !== undefined ? `Change: ${money(receipt.changeDue)}` : "",
+    isMomoOrBank && receipt.amountPaid !== undefined ? `Amount Paid (${receipt.paymentType}): ${money(momoOrBankPaid)}` : "",
+    isMomoOrBank && receipt.amountPaid !== undefined && receipt.amountPaid < receipt.total ? `Balance Due: ${money(momoOrBankBalance)}` : "",
+    isCreditOrPartial ? `Amount Paid: ${money(amountPaid)}` : "",
+    isCreditOrPartial ? `Balance Due: ${money(balanceDue)}` : "",
     business?.return_policy ? `Return Policy: ${business.return_policy}` : "",
     "",
     business?.receipt_footer || "Thank you for buying from us! Visit again.",
@@ -125,21 +126,20 @@ function buildReceiptText(receipt, business) {
 }
 
 function formatGhanaPhoneForWhatsApp(phone) {
-  if (!phone) return "";
-  let digits = String(phone).replace(/[^0-9]/g, "");
-  if (digits.startsWith("0") && digits.length === 10) {
-    digits = "233" + digits.slice(1);
-  }
-  if (digits.startsWith("00")) digits = digits.slice(2);
-  return digits;
+  return formatWhatsAppPhone(phone);
+}
+
+function formatCurrency(value, currencyCode = "GHS") {
+  return formatCurrencyDefault(value, currencyCode);
 }
 
 function buildWhatsAppReceiptText(receipt, business) {
+  const money = (value) => formatCurrency(value, business?.currency);
   const businessName = business?.name || "BizTrac Business";
   const businessDetails = [business?.phone, business?.location].filter(Boolean).join(" | ");
 
   const lineItems = (receipt.lines || [])
-    .map((line) => `• *${line.name}* (x${line.quantity}) - ${formatCurrency(line.total)}`)
+    .map((line) => `• *${line.name}* (x${line.quantity}) - ${money(line.total)}`)
     .join("\n");
 
   const isCreditOrPartial =
@@ -331,6 +331,7 @@ export function Sales({
   onTriggerSync,
   onRefreshQueueCount,
 }) {
+  const formatCurrency = (value) => formatCurrencyDefault(value, business?.currency);
   const [cart, setCart] = useState([]);
   const [actionError, setActionError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");

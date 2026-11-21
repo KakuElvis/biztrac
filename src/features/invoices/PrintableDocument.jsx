@@ -172,10 +172,10 @@ export function PrintableDocument({ doc, business = {} }) {
                     </td>
                     <td className="py-3 px-3 text-center font-mono font-medium">{item.quantity}</td>
                     <td className="py-3 px-3 text-right font-mono font-medium">
-                      {formatCurrency(item.unit_price)}
+                      {formatCurrency(item.unit_price, currencyCode)}
                     </td>
                     <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">
-                      {formatCurrency(item.line_total)}
+                      {formatCurrency(item.line_total, currencyCode)}
                     </td>
                   </tr>
                 ))}
@@ -223,13 +223,13 @@ export function PrintableDocument({ doc, business = {} }) {
             <div className="w-full sm:w-5/12 bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-xs">
               <div className="flex justify-between text-slate-600">
                 <span>Subtotal:</span>
-                <span className="font-mono font-medium">{formatCurrency(doc.subtotal)}</span>
+                <span className="font-mono font-medium">{formatCurrency(doc.subtotal, currencyCode)}</span>
               </div>
 
               {Number(doc.discount_amount) > 0 && (
                 <div className="flex justify-between text-emerald-700 font-semibold">
                   <span>Discount:</span>
-                  <span className="font-mono">- {formatCurrency(doc.discount_amount)}</span>
+                  <span className="font-mono">- {formatCurrency(doc.discount_amount, currencyCode)}</span>
                 </div>
               )}
 
@@ -239,7 +239,7 @@ export function PrintableDocument({ doc, business = {} }) {
                     Tax / VAT ({doc.tax_rate}%):
                   </span>
                   <span className="font-mono font-medium">
-                    {formatCurrency(doc.tax_amount)}
+                    {formatCurrency(doc.tax_amount, currencyCode)}
                   </span>
                 </div>
               )}
@@ -247,7 +247,7 @@ export function PrintableDocument({ doc, business = {} }) {
               <div className="flex justify-between items-center text-sm font-black text-slate-900 pt-3 border-t-2 border-slate-900">
                 <span className="uppercase tracking-tight">Total Amount Due:</span>
                 <span className="text-base font-black font-mono text-emerald-800">
-                  {formatCurrency(doc.total_amount)}
+                  {formatCurrency(doc.total_amount, currencyCode)}
                 </span>
               </div>
             </div>

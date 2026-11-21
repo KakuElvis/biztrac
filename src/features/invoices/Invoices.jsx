@@ -15,7 +15,7 @@ import {
   X,
   UserCheck,
 } from "lucide-react";
-import { formatCurrency, formatWhatsAppPhone } from "../../lib/formatters.js";
+import { formatCurrency as formatCurrencyDefault, formatWhatsAppPhone } from "../../lib/formatters.js";
 import { showToast } from "../../lib/toast.js";
 import { PrintableDocument } from "./PrintableDocument.jsx";
 import { StatusDropdown } from "./StatusDropdown.jsx";
@@ -39,6 +39,7 @@ export function Invoices({
   _onNavigate,
 }) {
   const businessId = business?.id;
+  const formatCurrency = (value) => formatCurrencyDefault(value, business?.currency);
 
   const [activeSubView, setActiveSubView] = useState("editor"); // 'editor' | 'history'
   const [showPreview, setShowPreview] = useState(false);

@@ -5,6 +5,7 @@ import {
   formatPaymentMethod,
   loadCustomerNames,
   fetchSaleItemsInChunks,
+  fetchAllPages,
 } from "./serviceUtils.js";
 
 export const emptyDashboardSummary = {
@@ -83,18 +84,20 @@ export async function getDashboardSummary(businessId, { includeProfit = true } =
 
   const [todaySalesResult, expensesResult, recentSalesResult, debtorBalancesResult] =
     await Promise.all([
-      client
+      fetchAllPages((from, to) => client
         .from("sales")
         .select("id, reference, payment_method, customer_id, total, amount_paid, sold_at")
         .eq("business_id", businessId)
         .gte("sold_at", startIso)
         .lt("sold_at", endIso)
-        .order("sold_at", { ascending: false }),
-      client
+        .order("sold_at", { ascending: false })
+        .range(from, to)),
+      fetchAllPages((from, to) => client
         .from("expenses")
         .select("id, amount")
         .eq("business_id", businessId)
-        .eq("incurred_on", dateKey),
+        .eq("incurred_on", dateKey)
+        .range(from, to)),
       client
         .from("sales")
         .select("id, reference, payment_method, customer_id, total, amount_paid, sold_at")
