@@ -201,7 +201,71 @@ export async function restockProduct(businessId, productId, restockData) {
     p_notes: (notes || "").trim(),
     p_cost_method: normCostMethod,
   });
-  if (error) throw error;
+
+  if (error) {
+    if (error.code === "PGRST202" || error.message?.includes("restock_product")) {
+      const client = requireSupabase();
+      const { data: currentProduct, error: fetchErr } = await client
+        .from("products")
+        .select("quantity, cost_price, selling_price")
+        .eq("id", productId)
+        .eq("business_id", businessId)
+        .single();
+
+      if (fetchErr) throw fetchErr;
+
+      const prevQty = Number(currentProduct.quantity || 0);
+      const prevCost = Number(currentProduct.cost_price || 0);
+      const addQty = Number(quantityAdded);
+      const incomingCost = Number(newCostPrice);
+      const newQty = prevQty + addQty;
+
+      let finalCost = incomingCost;
+      if (normCostMethod === "avco") {
+        if (newQty > 0) {
+          finalCost = Math.round(((prevQty * prevCost + addQty * incomingCost) / newQty) * 100) / 100;
+        }
+      }
+
+      const finalSelling = !isNaN(Number(newSellingPrice)) && Number(newSellingPrice) > 0
+        ? Number(newSellingPrice)
+        : currentProduct.selling_price;
+
+      await client
+        .from("products")
+        .update({
+          quantity: newQty,
+          cost_price: finalCost,
+          selling_price: finalSelling,
+        })
+        .eq("id", productId)
+        .eq("business_id", businessId);
+
+      await client.from("product_restocks").insert({
+        business_id: businessId,
+        product_id: productId,
+        quantity_added: addQty,
+        previous_quantity: prevQty,
+        new_quantity: newQty,
+        old_cost_price: prevCost,
+        new_cost_price: incomingCost,
+        old_selling_price: currentProduct.selling_price,
+        new_selling_price: finalSelling,
+        supplier_name: (supplierName || "").trim() || null,
+        notes: (notes || "").trim() || null,
+      });
+
+      return {
+        product_id: productId,
+        previous_quantity: prevQty,
+        new_quantity: newQty,
+        cost_price: finalCost,
+        selling_price: finalSelling,
+        cost_method: normCostMethod,
+      };
+    }
+    throw error;
+  }
   return data;
 }
 

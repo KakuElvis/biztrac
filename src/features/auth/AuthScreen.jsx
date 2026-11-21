@@ -38,7 +38,7 @@ export function AuthScreen() {
   const [mode, setMode] = useState("login");
 
   return (
-    <main className="min-h-[100dvh] flex flex-col justify-center px-4 py-4 sm:px-6 sm:py-8 bg-slate-50/80">
+    <main className="min-h-[100dvh] flex flex-col justify-center px-4 py-4 sm:px-6 sm:py-8 bg-white">
       <section className="mx-auto w-full max-w-md sm:max-w-xl lg:max-w-5xl overflow-hidden rounded-3xl lg:rounded-[2rem] border border-slate-200/90 bg-white shadow-soft lg:grid lg:grid-cols-[0.88fr_1.12fr]">
         {/* Left Branding Showcase Panel - Hidden on mobile, visible on desktop */}
         <div className="hidden lg:flex relative overflow-hidden bg-gradient-to-br from-[#021940] via-palmDeep to-[#032d6f] p-8 lg:p-10 text-white flex-col justify-between">
@@ -208,7 +208,7 @@ export function PasswordRecoveryScreen({ onComplete }) {
   }
 
   return (
-    <main className="screen-pad grid min-h-screen place-items-center py-6 bg-slate-50">
+    <main className="screen-pad grid min-h-screen place-items-center py-6 bg-white">
       <form
         className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-soft sm:p-8"
         onSubmit={handleSubmit}

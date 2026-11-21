@@ -11,16 +11,14 @@
 }
 
 html {
-  background: #f4f8ff;
+  background: #ffffff;
 }
 
 body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  background:
-    radial-gradient(circle at top left, rgba(245, 166, 35, 0.16), transparent 30rem),
-    linear-gradient(180deg, #ffffff 0%, #f4f8ff 100%);
+  background: #ffffff;
   color: #022864;
 }
 

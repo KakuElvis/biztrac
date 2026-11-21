@@ -74,6 +74,7 @@ export default function App() {
   const lastBackPressRef = useRef(0);
 
   const permissions = usePermissions(workspace?.role, previewRole);
+  const isCashier = Boolean(permissions?.isCashier);
 
   // Hook password recovery screen into the back stack
   useBackButtonModal(
@@ -88,7 +89,7 @@ export default function App() {
   const handleNavigate = useCallback((nextScreen, { replace = false } = {}) => {
     if (!screens[nextScreen]) return;
 
-    if (permissions?.isCashier && CASHIER_RESTRICTED_SCREENS.includes(nextScreen)) {
+    if (isCashier && CASHIER_RESTRICTED_SCREENS.includes(nextScreen)) {
       showToast("Access restricted. This section is only available to store owners and managers.", {
         type: "info",
       });
@@ -107,15 +108,15 @@ export default function App() {
         window.history.pushState({ screen: nextScreen }, "", url.toString());
       }
     }
-  }, [permissions?.isCashier]);
+  }, [isCashier]);
 
   // Guard activeScreen: immediately bounce cashier away if currently on a restricted screen
   useEffect(() => {
-    if (permissions?.isCashier && CASHIER_RESTRICTED_SCREENS.includes(activeScreen)) {
+    if (isCashier && CASHIER_RESTRICTED_SCREENS.includes(activeScreen)) {
       showToast("Access restricted. Redirecting to Sales.", { type: "info" });
       handleNavigate("sales", { replace: true });
     }
-  }, [permissions?.isCashier, activeScreen, handleNavigate]);
+  }, [isCashier, activeScreen, handleNavigate]);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -157,7 +158,7 @@ export default function App() {
         return;
       }
 
-      if (permissions?.isCashier && CASHIER_RESTRICTED_SCREENS.includes(target)) {
+      if (isCashier && CASHIER_RESTRICTED_SCREENS.includes(target)) {
         setActiveScreen("sales");
         return;
       }
@@ -171,7 +172,7 @@ export default function App() {
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [activeScreen, permissions?.isCashier]);
+  }, [activeScreen, isCashier]);
 
   const {
     products,
@@ -350,7 +351,7 @@ export default function App() {
 
   if (isLoading || (session && workspaceLoading)) {
     return (
-      <main className="grid min-h-screen place-items-center bg-slate-50 px-4">
+      <main className="grid min-h-screen place-items-center bg-white px-4">
         <div className="flex flex-col items-center gap-4 rounded-[1.75rem] border border-slate-200 bg-white px-8 py-8 shadow-soft">
           <AppLogo
             showText={false}

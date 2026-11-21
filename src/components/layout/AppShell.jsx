@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   BarChart3,
   Boxes,
@@ -20,6 +20,7 @@ import {
   RefreshCw,
   Trash2,
   X,
+  Settings,
 } from "lucide-react";
 import { AppLogo } from "../../components/common/AppLogo.jsx";
 import { classNames, formatCurrency } from "../../lib/formatters.js";
@@ -57,6 +58,20 @@ export function AppShell({
   onSetPreviewRole,
 }) {
   const [showConflictModal, setShowConflictModal] = useState(false);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isMobileDrawerOpen) return undefined;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") setIsMobileDrawerOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "";
+    };
+  }, [isMobileDrawerOpen]);
   const { canInstall, isInstalled, isIOS, needRefresh, onInstallPwa, onUpdatePwa } = pwaState;
   const isCashier = Boolean(permissions?.isCashier);
 
@@ -68,10 +83,21 @@ export function AppShell({
     ? navItems.filter((item) => !["inventory", "reports", "expenses", "more"].includes(item.id))
     : mobileNavItems;
 
+  const drawerNavItems = [
+    { id: "dashboard", label: "Dashboard", icon: Home },
+    { id: "sales", label: "Sales & POS", icon: ShoppingCart },
+    ...(!isCashier ? [{ id: "inventory", label: "Stock / Inventory", icon: Boxes }] : []),
+    { id: "customers", label: "Customers", icon: UsersRound },
+    ...(!isCashier ? [{ id: "invoices", label: "Invoices & Quotes", icon: FileText }] : []),
+    ...(!isCashier ? [{ id: "expenses", label: "Expenses", icon: WalletCards }] : []),
+    ...(!isCashier ? [{ id: "reports", label: "Reports & Analytics", icon: BarChart3 }] : []),
+    ...(!isCashier ? [{ id: "more", label: "Settings & Store Profile", icon: Settings }] : []),
+  ];
+
   return (
-    <div className="min-h-screen pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-0">
+    <div className="min-h-screen bg-white pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-0">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl lg:grid lg:grid-cols-[18rem_1fr]">
-        <aside className="sticky top-0 hidden h-screen border-r border-slate-200 bg-white/85 p-5 backdrop-blur lg:flex lg:flex-col">
+        <aside className="sticky top-0 z-10 hidden h-screen border-r border-slate-200 bg-white p-5 shadow-[2px_0_8px_rgba(2,40,100,0.06)] lg:flex lg:flex-col">
           <Brand />
           <nav className="mt-8 space-y-2">
             {visibleNavItems.map((item) => (
@@ -130,8 +156,33 @@ export function AppShell({
         </aside>
 
         <main className="w-full">
-          <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur">
-            <div className="screen-pad mx-auto flex h-20 max-w-5xl items-center justify-between gap-3">
+          <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
+            {/* Mobile Header: BizTrac Logo on left, Hamburger Menu on right (matches reference mockup) */}
+            <div className="screen-pad mx-auto flex h-16 max-w-5xl items-center justify-between lg:hidden">
+              <button
+                type="button"
+                onClick={() => onNavigate("dashboard")}
+                className="flex items-center text-left focus:outline-none focus:ring-2 focus:ring-palm/20 rounded-xl transition active:scale-98"
+                aria-label="BizTrac home"
+              >
+                <AppLogo
+                  imageClassName="h-9 w-9 rounded-xl border-2 border-ink/50 object-contain shadow-xs"
+                  titleClassName="text-xl font-black text-slate-900 tracking-tight"
+                  subtitle={null}
+                />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsMobileDrawerOpen(true)}
+                className="grid h-11 w-11 place-items-center rounded-xl text-slate-900 transition hover:bg-slate-100 active:scale-95 focus:outline-none focus:ring-2 focus:ring-palm/20"
+                aria-label="Open navigation menu"
+              >
+                <Menu className="h-6 w-6" strokeWidth={2.4} />
+              </button>
+            </div>
+
+            {/* Desktop Header */}
+            <div className="screen-pad mx-auto hidden h-20 max-w-5xl items-center justify-between gap-3 lg:flex">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-palm text-sm font-black text-white">
                   {business.logoText}
@@ -313,7 +364,7 @@ export function AppShell({
         </button>
       ) : null}
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] pt-2 backdrop-blur lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white px-2 pb-[env(safe-area-inset-bottom)] pt-2 lg:hidden">
         <div className={classNames("mx-auto grid gap-1", isCashier ? "max-w-xs grid-cols-3" : "max-w-md grid-cols-5")}>
           {visibleMobileNavItems.map((item) => (
             <MobileNavButton
@@ -330,6 +381,147 @@ export function AppShell({
           ))}
         </div>
       </nav>
+
+      {/* Mobile Navigation Drawer */}
+      {isMobileDrawerOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+            onClick={() => setIsMobileDrawerOpen(false)}
+            aria-hidden="true"
+          />
+
+          {/* Slide-out Drawer Panel */}
+          <aside
+            className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xs flex-col bg-white shadow-2xl border-l border-slate-100 animate-in slide-in-from-right duration-200 ease-out"
+            aria-label="Mobile Navigation Drawer"
+          >
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <AppLogo
+                imageClassName="h-8 w-8 rounded-xl object-contain shadow-xs"
+                titleClassName="text-lg font-black text-slate-900 tracking-tight"
+                subtitle={null}
+              />
+              <button
+                type="button"
+                onClick={() => setIsMobileDrawerOpen(false)}
+                className="grid h-10 w-10 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition active:scale-95"
+                aria-label="Close menu"
+              >
+                <X className="h-5 w-5" strokeWidth={2.4} />
+              </button>
+            </div>
+
+            {/* Store & Member Info Card */}
+            <div className="border-b border-slate-100 bg-slate-50/70 p-4">
+              <div className="flex items-center gap-3">
+                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-palm text-xs font-black text-white shadow-xs">
+                  {business?.logoText || "BT"}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-black text-ink">{business?.name || "BizTrac Store"}</p>
+                  {business?.location ? (
+                    <p className="truncate text-xs font-medium text-slate-500">{business.location}</p>
+                  ) : null}
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    {permissions?.roleMeta && (
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border ${permissions.roleMeta.badgeBg}`}>
+                        {permissions.roleMeta.shortLabel}
+                      </span>
+                    )}
+                    <span
+                      className={classNames(
+                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                        isOnline
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80"
+                          : "bg-amber-50 text-amber-800 border border-amber-200/80"
+                      )}
+                    >
+                      <span
+                        className={classNames(
+                          "h-1.5 w-1.5 rounded-full",
+                          isOnline ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                        )}
+                      />
+                      {isOnline ? "Online" : "Offline"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Navigation Links */}
+            <nav className="flex-1 overflow-y-auto p-4 space-y-1.5">
+              {drawerNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeScreen === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      onNavigate(item.id);
+                      setIsMobileDrawerOpen(false);
+                    }}
+                    className={classNames(
+                      "flex min-h-12 w-full items-center justify-between rounded-xl px-4 text-sm font-bold transition",
+                      isActive
+                        ? "bg-palm text-white shadow-md shadow-palm/20"
+                        : "text-slate-700 hover:bg-slate-100 hover:text-ink active:bg-slate-200/60"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon className="h-5 w-5" />
+                      <span>{item.label}</span>
+                    </div>
+                    {item.id === "inventory" && lowStockCount > 0 ? (
+                      <span
+                        className={classNames(
+                          "grid h-5 min-w-5 place-items-center rounded-full px-1 text-[0.65rem] font-black",
+                          isActive ? "bg-white text-palm" : "bg-red-600 text-white"
+                        )}
+                      >
+                        {lowStockCount}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </nav>
+
+            {/* Drawer Footer */}
+            <div className="border-t border-slate-100 p-4 space-y-2 bg-slate-50/50">
+              {(canInstall || isIOS) && !isInstalled ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onInstallPwa?.();
+                    setIsMobileDrawerOpen(false);
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-palm/30 bg-skyglass px-3 py-2.5 text-xs font-bold text-palm hover:bg-palm hover:text-white transition"
+                >
+                  <Smartphone className="h-4 w-4" />
+                  <span>Install BizTrac App</span>
+                </button>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileDrawerOpen(false);
+                  onSignOut?.();
+                }}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-ink px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 active:scale-98"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
 
       {showConflictModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in">
