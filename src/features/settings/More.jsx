@@ -444,7 +444,7 @@ export function More({
                   }
                 },
               },
-              { label: "Invoices", icon: FileText, note: "Drafts, sent, paid" },
+              { label: "Invoices & Quotations", icon: FileText, note: "A4 invoices, estimates, WhatsApp dispatch", screen: "invoices" },
               { label: "Payment accounts", icon: CreditCard, note: "MoMo and bank details" },
               { label: "Low-stock alerts", icon: Bell, note: "Reminder thresholds", screen: "inventory" },
               { label: "App settings", icon: Settings, note: "Theme and staff access" },

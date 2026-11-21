@@ -22,6 +22,7 @@ const Expenses = lazy(() => import("./features/expenses/Expenses.jsx").then((m) 
 const Reports = lazy(() => import("./features/reports/Reports.jsx").then((m) => ({ default: m.Reports || m.default })));
 const More = lazy(() => import("./features/settings/More.jsx").then((m) => ({ default: m.More || m.default })));
 const Customers = lazy(() => import("./features/customers/Customers.jsx").then((m) => ({ default: m.Customers || m.default })));
+const Invoices = lazy(() => import("./features/invoices/Invoices.jsx").then((m) => ({ default: m.Invoices || m.default })));
 
 const screens = {
   dashboard: Dashboard,
@@ -30,10 +31,11 @@ const screens = {
   inventory: Inventory,
   reports: Reports,
   expenses: Expenses,
+  invoices: Invoices,
   more: More,
 };
 
-const CASHIER_RESTRICTED_SCREENS = ["inventory", "reports", "expenses", "more"];
+const CASHIER_RESTRICTED_SCREENS = ["inventory", "reports", "expenses", "invoices", "more"];
 
 function getScreenFromUrl() {
   if (typeof window === "undefined") return "dashboard";

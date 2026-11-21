@@ -14,6 +14,7 @@ import {
   Eye,
   EyeOff,
   Lock,
+  FileText,
 } from "lucide-react";
 import { AppLogo } from "../../components/common/AppLogo.jsx";
 import { classNames } from "../../lib/formatters.js";
@@ -72,6 +73,13 @@ export function AppShell({
                 onClick={() => onNavigate(item.id)}
               />
             ))}
+            {!isCashier && (
+              <NavButton
+                item={{ id: "invoices", label: "Invoices & Quotes", icon: FileText }}
+                active={activeScreen === "invoices"}
+                onClick={() => onNavigate("invoices")}
+              />
+            )}
             {!isCashier && (
               <NavButton
                 item={{ id: "expenses", label: "Expenses", icon: WalletCards }}
