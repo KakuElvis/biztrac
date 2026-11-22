@@ -341,8 +341,19 @@ export function Reports({
   reportsError,
   reportsLoading,
   onNavigate,
+  plan,
+  onOpenUpgradeModal,
 }) {
   const [activeReportTab, setActiveReportTab] = useState("overview"); // "overview" | "stock"
+
+  const handleExportCsv = () => {
+    if (plan && !plan.canAccess("data_export")) {
+      showToast("Spreadsheet exports (Excel / CSV) are a BizTrac Pro feature.", { type: "warn" });
+      onOpenUpgradeModal?.();
+      return;
+    }
+    exportReportCsv(business, summary, lowStock, reportRange, reportStartDate, reportEndDate);
+  };
   const [stockSearch, setStockSearch] = useState("");
   const [stockCategoryFilter, setStockCategoryFilter] = useState("all");
   const [selectedTimelineProduct, setSelectedTimelineProduct] = useState(null);
@@ -370,6 +381,7 @@ export function Reports({
     const totalRetailValuation = products.reduce((sum, p) => sum + (p.sellingPrice || 0) * (p.quantity || 0), 0);
     const totalUnitsInStock = products.reduce((sum, p) => sum + (p.quantity || 0), 0);
     const expectedMargin = totalRetailValuation - totalCostValuation;
+    const lowStockCount = products.filter((p) => p.quantity <= p.lowStockLimit).length;
 
     return {
       totalProductsCount: products.length,
@@ -377,9 +389,9 @@ export function Reports({
       totalCostValuation,
       totalRetailValuation,
       expectedMargin,
-      lowStockCount: lowStock.length,
+      lowStockCount,
     };
-  }, [products, lowStock]);
+  }, [products]);
 
   const categoryValuationData = useMemo(() => {
     const map = new Map();
@@ -612,7 +624,7 @@ export function Reports({
                       variant="secondary"
                       type="button"
                       className="w-full"
-                      onClick={() => exportReportCsv(business, summary, lowStock, reportRange, reportStartDate, reportEndDate)}
+                      onClick={handleExportCsv}
                     >
                       Export Excel / CSV
                     </Button>

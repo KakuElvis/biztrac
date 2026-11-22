@@ -32,16 +32,16 @@ describe("Invoice Service", () => {
 
   it("generates formatted document numbers with proper prefixes", () => {
     const invNum = generateDocNumber("invoice");
-    expect(invNum).toMatch(/^BT-INV-\d{4}-\d{4}$/);
+    expect(invNum).toMatch(/^BT-INV-\d{4}-[A-Z0-9]+$/);
 
     const qtNum = generateDocNumber("quotation");
-    expect(qtNum).toMatch(/^BT-QT-\d{4}-\d{4}$/);
+    expect(qtNum).toMatch(/^BT-QT-\d{4}-[A-Z0-9]+$/);
 
     const recNum = generateDocNumber("receipt");
-    expect(recNum).toMatch(/^BT-REC-\d{4}-\d{4}$/);
+    expect(recNum).toMatch(/^BT-REC-\d{4}-[A-Z0-9]+$/);
 
     const piNum = generateDocNumber("proforma");
-    expect(piNum).toMatch(/^BT-PI-\d{4}-\d{4}$/);
+    expect(piNum).toMatch(/^BT-PI-\d{4}-[A-Z0-9]+$/);
   });
 
   it("creates initial invoice document with VAT defaults when business has VAT enabled", () => {

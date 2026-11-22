@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabase.js";
+import { supabase, isSupabaseConfigured } from "../lib/supabase.js";
 
 function requireSupabase() {
   if (!supabase) {
@@ -59,6 +59,8 @@ export function toBusiness(row) {
     vat_rate: Number(row.vat_rate ?? local.vat_rate ?? 15.0),
     nhil_rate: Number(row.nhil_rate ?? local.nhil_rate ?? 2.5),
     getfund_rate: Number(row.getfund_rate ?? local.getfund_rate ?? 2.5),
+    plan_tier: row.plan_tier || local.plan_tier || "free",
+    plan_expires_at: row.plan_expires_at || local.plan_expires_at || null,
   };
 }
 
@@ -129,4 +131,52 @@ export async function updateBusiness(businessId, business) {
 
   if (error) throw error;
   return toBusiness({ ...data, ...updatedLocal });
+}
+
+export async function upgradeBusinessPlan(businessId, { planTier = "pro", durationDays = 30, reference = null, amount = 0, paymentMethod = "momo" } = {}) {
+  if (!businessId) throw new Error("Business ID is required to upgrade plan.");
+
+  const local = getLocalReceiptSettings(businessId);
+  const now = Date.now();
+  const newExpiry = new Date(now + durationDays * 24 * 60 * 60 * 1000).toISOString();
+
+  // 1. Call remote RPC upgrade_business_plan if Supabase is configured
+  if (isSupabaseConfigured && supabase) {
+    const { data, error } = await supabase.rpc("upgrade_business_plan", {
+      p_business_id: businessId,
+      p_plan_tier: planTier,
+      p_duration_days: durationDays,
+      p_reference: reference || `UPG-${Date.now()}`,
+      p_amount: amount,
+      p_payment_method: paymentMethod,
+    });
+
+    if (error) throw error;
+
+    if (data?.success) {
+      saveLocalReceiptSettings(businessId, {
+        ...local,
+        plan_tier: data.plan_tier,
+        plan_expires_at: data.plan_expires_at,
+      });
+      return {
+        plan_tier: data.plan_tier,
+        plan_expires_at: data.plan_expires_at,
+        is_pro: data.is_pro,
+      };
+    }
+  }
+
+  // 2. Offline / local fallback when Supabase is not configured
+  saveLocalReceiptSettings(businessId, {
+    ...local,
+    plan_tier: planTier,
+    plan_expires_at: newExpiry,
+  });
+
+  return {
+    plan_tier: planTier,
+    plan_expires_at: newExpiry,
+    is_pro: true,
+  };
 }

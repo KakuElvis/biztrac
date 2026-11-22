@@ -23,6 +23,7 @@ import {
   KeyRound,
   Share2,
 } from "lucide-react";
+import { isProBusiness } from "../../lib/plans.js";
 import {
   ROLES,
   ROLE_METADATA,
@@ -51,6 +52,7 @@ export function StaffManagement({
   onSetPreviewRole,
   isOpen = false,
   onClose,
+  onOpenUpgradeModal,
 }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -114,6 +116,11 @@ export function StaffManagement({
   }, [isOpen, businessId, loadMembers]);
 
   const handleOpenAddModal = () => {
+    if (!isProBusiness(business) && members.length >= 1) {
+      showToast("Multi-Cashier accounts with PINs are a BizTrac Pro feature. Free tier includes 1 account (Owner).", { type: "warn" });
+      onOpenUpgradeModal?.();
+      return;
+    }
     setFormName("");
     setFormEmail("");
     setFormPhone("");

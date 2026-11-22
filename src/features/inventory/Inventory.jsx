@@ -55,11 +55,23 @@ export function Inventory({
   totalPages = 1,
   onPageChange,
   onPageSizeChange,
+  plan,
+  onOpenUpgradeModal,
 }) {
   const [editingProduct, setEditingProduct] = useState(null);
   const [restockingProduct, setRestockingProduct] = useState(null);
   const [historyProduct, setHistoryProduct] = useState(null);
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
+
+  const handleOpenCreateProduct = () => {
+    const max = plan?.limits?.maxProducts || 50;
+    if (plan && !plan.isPro && totalCount >= max) {
+      showToast(`Free plan limit reached (${max} products). Upgrade to Pro for unlimited inventory!`, { type: "warn" });
+      onOpenUpgradeModal?.();
+      return;
+    }
+    setIsCreatingProduct(true);
+  };
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [categoryError, setCategoryError] = useState("");
@@ -206,7 +218,7 @@ export function Inventory({
             </Button>
           )}
           {canCreateProduct && (
-            <Button icon={Plus} onClick={() => setIsCreatingProduct(true)}>
+            <Button icon={Plus} onClick={handleOpenCreateProduct}>
               Add Product
             </Button>
           )}
@@ -308,7 +320,7 @@ export function Inventory({
       ) : filteredProducts.length === 0 ? (
         <EmptyInventory
           hasProducts={products.length > 0}
-          onCreate={() => setIsCreatingProduct(true)}
+          onCreate={handleOpenCreateProduct}
         />
       ) : (
         <div className="space-y-4">
@@ -333,6 +345,8 @@ export function Inventory({
             totalPages={totalPages}
             onPageChange={onPageChange}
             onPageSizeChange={onPageSizeChange}
+            plan={plan}
+            onOpenUpgradeModal={onOpenUpgradeModal}
           />
         </div>
       )}
@@ -1489,6 +1503,8 @@ function PaginationBar({
   totalPages = 1,
   onPageChange,
   onPageSizeChange,
+  plan,
+  onOpenUpgradeModal,
 }) {
   if (!onPageChange) return null;
 
@@ -1501,6 +1517,19 @@ function PaginationBar({
         Showing <span className="font-bold text-ink">{startItem}</span> to{" "}
         <span className="font-bold text-ink">{endItem}</span> of{" "}
         <span className="font-bold text-ink">{totalCount}</span> products
+        {!plan?.isPro && (
+          <span className="ml-2 text-slate-400">
+            (50 Free Limit -{" "}
+            <button
+              type="button"
+              onClick={onOpenUpgradeModal}
+              className="text-amber-600 underline font-bold hover:text-amber-700"
+            >
+              Go Pro for Unlimited
+            </button>
+            )
+          </span>
+        )}
       </div>
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
