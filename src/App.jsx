@@ -19,6 +19,7 @@ import { handleBackPop, clearBackStack } from "./services/navigation/backStackSe
 import { useBackButtonModal } from "./hooks/useBackButtonModal.js";
 import { showToast } from "./lib/toast.js";
 import { usePermissions } from "./features/staff/index.js";
+import { checkIsSuperAdmin } from "./services/adminService.js";
 
 const Dashboard = lazy(() => import("./features/dashboard/Dashboard.jsx").then((m) => ({ default: m.Dashboard || m.default })));
 const Inventory = lazy(() => import("./features/inventory/Inventory.jsx").then((m) => ({ default: m.Inventory || m.default })));
@@ -28,6 +29,8 @@ const Reports = lazy(() => import("./features/reports/Reports.jsx").then((m) => 
 const More = lazy(() => import("./features/settings/More.jsx").then((m) => ({ default: m.More || m.default })));
 const Customers = lazy(() => import("./features/customers/Customers.jsx").then((m) => ({ default: m.Customers || m.default })));
 const Invoices = lazy(() => import("./features/invoices/Invoices.jsx").then((m) => ({ default: m.Invoices || m.default })));
+const AdminPortal = lazy(() => import("./features/admin/AdminPortal.jsx").then((m) => ({ default: m.AdminPortal || m.default })));
+const AdminLoginScreen = lazy(() => import("./features/admin/AdminLoginScreen.jsx").then((m) => ({ default: m.AdminLoginScreen || m.default })));
 
 const screens = {
   dashboard: Dashboard,
@@ -38,14 +41,17 @@ const screens = {
   expenses: Expenses,
   invoices: Invoices,
   more: More,
+  admin: AdminPortal,
 };
 
 const CASHIER_RESTRICTED_SCREENS = ["inventory", "reports", "expenses", "invoices", "more"];
 
 function getScreenFromUrl() {
   if (typeof window === "undefined") return "dashboard";
+  if (window.location.pathname.startsWith("/admin")) return "admin";
   const params = new URLSearchParams(window.location.search);
   const screenParam = params.get("screen");
+  if (screenParam === "admin") return "admin";
   return screenParam && screens[screenParam] ? screenParam : "dashboard";
 }
 
@@ -84,7 +90,43 @@ export default function App() {
   const lastBackPressRef = useRef(0);
 
   const permissions = usePermissions(workspace?.role, previewRole);
-  const isCashier = Boolean(permissions?.isCashier);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const isCashier = Boolean(session && permissions?.isCashier && !isSuperAdmin && workspace?.business);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (session?.user && !session.isStaffSession) {
+      checkIsSuperAdmin()
+        .then((res) => {
+          if (isMounted) {
+            const isSuper = Boolean(res);
+            setIsSuperAdmin(isSuper);
+            if (isSuper) {
+              if (
+                !workspace?.business ||
+                (typeof window !== "undefined" && window.location.pathname.startsWith("/admin"))
+              ) {
+                setActiveScreen("admin");
+                if (typeof window !== "undefined") {
+                  const url = new URL(window.location.href);
+                  url.pathname = "/admin";
+                  url.searchParams.delete("screen");
+                  window.history.replaceState({ screen: "admin" }, "", url.toString());
+                }
+              }
+            }
+          }
+        })
+        .catch(() => {
+          if (isMounted) setIsSuperAdmin(false);
+        });
+    } else {
+      setIsSuperAdmin(false);
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [session, workspace]);
 
   // Hook password recovery screen into the back stack
   useBackButtonModal(
@@ -99,7 +141,12 @@ export default function App() {
   const handleNavigate = useCallback((nextScreen, { replace = false } = {}) => {
     if (!screens[nextScreen]) return;
 
-    if (isCashier && CASHIER_RESTRICTED_SCREENS.includes(nextScreen)) {
+    if (session && nextScreen === "admin" && !isSuperAdmin) {
+      showToast("Access restricted: Super admin credentials required.", { type: "warn" });
+      return;
+    }
+
+    if (session && isCashier && CASHIER_RESTRICTED_SCREENS.includes(nextScreen)) {
       showToast("Access restricted. This section is only available to store owners and managers.", {
         type: "info",
       });
@@ -110,7 +157,15 @@ export default function App() {
 
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
-      url.searchParams.set("screen", nextScreen);
+      if (nextScreen === "admin") {
+        url.pathname = "/admin";
+        url.searchParams.delete("screen");
+      } else {
+        if (url.pathname.startsWith("/admin")) {
+          url.pathname = "/";
+        }
+        url.searchParams.set("screen", nextScreen);
+      }
 
       if (replace) {
         window.history.replaceState({ screen: nextScreen }, "", url.toString());
@@ -118,15 +173,15 @@ export default function App() {
         window.history.pushState({ screen: nextScreen }, "", url.toString());
       }
     }
-  }, [isCashier]);
+  }, [isCashier, isSuperAdmin, session]);
 
   // Guard activeScreen: immediately bounce cashier away if currently on a restricted screen
   useEffect(() => {
-    if (isCashier && CASHIER_RESTRICTED_SCREENS.includes(activeScreen)) {
+    if (session && isCashier && CASHIER_RESTRICTED_SCREENS.includes(activeScreen)) {
       showToast("Access restricted. Redirecting to Sales.", { type: "info" });
       handleNavigate("sales", { replace: true });
     }
-  }, [isCashier, activeScreen, handleNavigate]);
+  }, [session, isCashier, activeScreen, handleNavigate]);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -134,7 +189,12 @@ export default function App() {
     // Initialize history state with current screen
     const current = getScreenFromUrl();
     const url = new URL(window.location.href);
-    url.searchParams.set("screen", current);
+    if (current === "admin") {
+      url.pathname = "/admin";
+      url.searchParams.delete("screen");
+    } else {
+      url.searchParams.set("screen", current);
+    }
     window.history.replaceState({ screen: current }, "", url.toString());
 
     const handlePopState = (event) => {
@@ -173,6 +233,11 @@ export default function App() {
         return;
       }
 
+      if (session && target === "admin" && !isSuperAdmin) {
+        setActiveScreen("dashboard");
+        return;
+      }
+
       if (screens[target]) {
         setActiveScreen(target);
       } else {
@@ -182,7 +247,7 @@ export default function App() {
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [activeScreen, isCashier]);
+  }, [activeScreen, isCashier, isSuperAdmin, session]);
 
   const {
     products,
@@ -380,7 +445,87 @@ export default function App() {
   }
 
   if (!session) {
-    return <AuthScreen />;
+    const isPathAdmin =
+      typeof window !== "undefined" &&
+      (window.location.pathname.startsWith("/admin") ||
+        new URLSearchParams(window.location.search).get("screen") === "admin");
+    if (activeScreen === "admin" || isPathAdmin) {
+      return (
+        <Suspense
+          fallback={
+            <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-slate-400">
+              <div className="h-10 w-10 border-3 border-purple-500 border-t-transparent rounded-full animate-spin mb-3" />
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Opening Admin Console...
+              </p>
+            </div>
+          }
+        >
+          <AdminLoginScreen
+            onSwitchToMerchant={() => {
+              if (typeof window !== "undefined") {
+                const url = new URL(window.location.href);
+                url.pathname = "/";
+                url.searchParams.delete("screen");
+                window.history.pushState({ screen: "dashboard" }, "", url.toString());
+              }
+              setActiveScreen("dashboard");
+            }}
+            onLoginSuccess={() => {
+              setActiveScreen("admin");
+            }}
+          />
+        </Suspense>
+      );
+    }
+
+    return (
+      <AuthScreen
+        onSwitchToAdmin={() => {
+          if (typeof window !== "undefined") {
+            const url = new URL(window.location.href);
+            url.pathname = "/admin";
+            url.searchParams.delete("screen");
+            window.history.pushState({ screen: "admin" }, "", url.toString());
+          }
+          setActiveScreen("admin");
+        }}
+      />
+    );
+  }
+
+  if (activeScreen === "admin" || (isSuperAdmin && !workspace?.business)) {
+    return (
+      <ErrorBoundary>
+        <Suspense
+          fallback={
+            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-slate-600">
+              <div className="h-10 w-10 border-3 border-purple-600 border-t-transparent rounded-full animate-spin mb-3" />
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                Loading Platform Console...
+              </p>
+            </div>
+          }
+        >
+          <AdminPortal
+            currentUser={session?.user}
+            hasStore={Boolean(workspace?.business)}
+            onExitAdmin={() => handleNavigate("dashboard")}
+            onSignOut={() => {
+              authSignOut(() => {
+                setActiveScreen("admin");
+                if (typeof window !== "undefined") {
+                  const url = new URL(window.location.href);
+                  url.pathname = "/admin";
+                  url.searchParams.delete("screen");
+                  window.history.replaceState({ screen: "admin" }, "", url.toString());
+                }
+              });
+            }}
+          />
+        </Suspense>
+      </ErrorBoundary>
+    );
   }
 
   const Screen = screens[activeScreen] ?? Dashboard;
@@ -407,6 +552,7 @@ export default function App() {
       onSetPreviewRole={setPreviewRole}
       plan={plan}
       onOpenUpgradeModal={() => setIsUpgradeModalOpen(true)}
+      isSuperAdmin={isSuperAdmin}
     >
       <ErrorBoundary>
         <Suspense fallback={<div className="p-6">Loading...</div>}>
@@ -421,6 +567,7 @@ export default function App() {
           business={business}
           plan={plan}
           onOpenUpgradeModal={() => setIsUpgradeModalOpen(true)}
+          onExitAdmin={() => handleNavigate("dashboard")}
           currentUser={session?.user}
           permissions={permissions}
           previewRole={previewRole}

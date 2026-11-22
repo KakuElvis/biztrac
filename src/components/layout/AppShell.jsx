@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import {
   Crown,
   Sparkles,
+  ShieldAlert,
   BarChart3,
   Boxes,
   Home,
@@ -60,6 +61,7 @@ export function AppShell({
   onSetPreviewRole,
   plan,
   onOpenUpgradeModal,
+  isSuperAdmin = false,
 }) {
   const [showConflictModal, setShowConflictModal] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
@@ -96,6 +98,7 @@ export function AppShell({
     ...(!isCashier ? [{ id: "expenses", label: "Expenses", icon: WalletCards }] : []),
     ...(!isCashier ? [{ id: "reports", label: "Reports & Analytics", icon: BarChart3 }] : []),
     ...(!isCashier ? [{ id: "more", label: "Settings & Store Profile", icon: Settings }] : []),
+    ...(isSuperAdmin ? [{ id: "admin", label: "Super Admin Portal", icon: ShieldAlert }] : []),
   ];
 
   return (
@@ -129,6 +132,13 @@ export function AppShell({
                 item={{ id: "expenses", label: "Expenses", icon: WalletCards }}
                 active={activeScreen === "expenses"}
                 onClick={() => onNavigate("expenses")}
+              />
+            )}
+            {isSuperAdmin && (
+              <NavButton
+                item={{ id: "admin", label: "Super Admin", icon: ShieldAlert }}
+                active={activeScreen === "admin"}
+                onClick={() => onNavigate("admin")}
               />
             )}
           </nav>
@@ -194,6 +204,15 @@ export function AppShell({
                     <Sparkles className="h-3 w-3 text-amber-600" /> Pro
                   </button>
                 )}
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigate("admin")}
+                    className="inline-flex items-center gap-1 rounded-full border border-purple-300 bg-purple-50 px-2 py-0.5 text-[10px] font-black uppercase text-purple-800 active:scale-95"
+                  >
+                    <ShieldAlert className="h-3 w-3 text-purple-600" /> Admin
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setIsMobileDrawerOpen(true)}
@@ -232,6 +251,15 @@ export function AppShell({
                       <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border ${permissions.roleMeta.badgeBg}`}>
                         {permissions.roleMeta.shortLabel}
                       </span>
+                    )}
+                    {isSuperAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => onNavigate("admin")}
+                        className="inline-flex items-center gap-1 rounded-full border border-purple-300 bg-purple-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-purple-800 transition hover:bg-purple-100 hover:border-purple-400 active:scale-95 shadow-2xs"
+                      >
+                        <ShieldAlert className="h-3 w-3 text-purple-600" /> Super Admin
+                      </button>
                     )}
                     <span
                       className={classNames(
@@ -467,6 +495,15 @@ export function AppShell({
                       <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border ${permissions.roleMeta.badgeBg}`}>
                         {permissions.roleMeta.shortLabel}
                       </span>
+                    )}
+                    {isSuperAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => onNavigate("admin")}
+                        className="inline-flex items-center gap-1 rounded-full border border-purple-300 bg-purple-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-purple-800 transition hover:bg-purple-100 hover:border-purple-400 active:scale-95 shadow-2xs"
+                      >
+                        <ShieldAlert className="h-3 w-3 text-purple-600" /> Super Admin
+                      </button>
                     )}
                     <span
                       className={classNames(

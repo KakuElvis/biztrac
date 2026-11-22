@@ -34,7 +34,7 @@ import {
   updatePassword,
 } from "../../services/authService.js";
 
-export function AuthScreen() {
+export function AuthScreen({ onSwitchToAdmin }) {
   const [mode, setMode] = useState("login");
 
   return (
@@ -170,6 +170,19 @@ export function AuthScreen() {
               <span>Encrypted</span>
             </span>
           </div>
+
+          {onSwitchToAdmin && (
+            <div className="mt-3 text-center">
+              <button
+                type="button"
+                onClick={onSwitchToAdmin}
+                className="text-[11px] font-bold text-slate-400 hover:text-purple-600 transition inline-flex items-center gap-1.5"
+              >
+                <ShieldCheck className="h-3.5 w-3.5 text-purple-500" />
+                <span>Super Administrator Portal &rarr;</span>
+              </button>
+            </div>
+          )}
         </div>
       </section>
     </main>
