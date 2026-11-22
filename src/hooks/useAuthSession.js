@@ -102,9 +102,9 @@ export function useAuthSession() {
       const fallbackId = session?.user?.id ? `biz-${session.user.id}` : "default-business";
       return {
         id: fallbackId,
-        name: "BizTrac",
+        name: "BizPurse",
         owner: fallbackOwner,
-        logoText: "BT",
+        logoText: "BP",
         phone: "",
         email: session?.user?.email || "",
         location: "",
@@ -124,7 +124,7 @@ export function useAuthSession() {
     }
 
     const current = workspace.business;
-    const initials = (current.name || "BizTrac")
+    const initials = (current.name || "BizPurse")
       .split(/\s+/)
       .slice(0, 2)
       .map((word) => word[0])
@@ -133,7 +133,7 @@ export function useAuthSession() {
 
     const resolved = {
       ...current,
-      logoText: initials || "BT",
+      logoText: initials || "BP",
       owner: fallbackOwner,
     };
 

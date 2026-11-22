@@ -23,8 +23,8 @@ export default defineConfig({
       ],
       manifest: {
         id: "/",
-        name: "BizTrac - Mobile Business Management",
-        short_name: "BizTrac",
+        name: "BizPurse - Mobile Business Management",
+        short_name: "BizPurse",
         description: "Mobile-first business management and POS application for Ghanaian SMEs.",
         theme_color: "#ffffff",
         background_color: "#ffffff",

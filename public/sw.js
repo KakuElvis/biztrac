@@ -1,4 +1,4 @@
-const CACHE_NAME = "biztrac-cache-v1";
+const CACHE_NAME = "bizpurse-cache-v1";
 const OFFLINE_PAGE = "/offline.html";
 const CORE_ASSETS = [
   "/",

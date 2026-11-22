@@ -1,6 +1,6 @@
-# BizTrac
+# BizPurse
 
-BizTrac is a mobile-first business management PWA for Ghanaian SMEs. It supports Supabase-backed authentication, business workspaces, inventory, product categories, sales, expenses, reports, customers, and business settings.
+BizPurse is a mobile-first business management PWA for Ghanaian SMEs. It supports Supabase-backed authentication, business workspaces, inventory, product categories, sales, expenses, reports, customers, and business settings.
 
 ## Stack
 

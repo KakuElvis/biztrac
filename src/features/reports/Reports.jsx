@@ -45,8 +45,8 @@ function escapeHtml(value) {
 }
 
 function buildReportHtml(summary, business, periodLabel, startDate, endDate, lowStock) {
-  const businessName = business?.name || "BizTrac Business";
-  const appName = "BizTrac";
+  const businessName = business?.name || "BizPurse Business";
+  const appName = "BizPurse";
   return `<!doctype html>
   <html>
     <head>
@@ -179,7 +179,7 @@ function buildReportHtml(summary, business, periodLabel, startDate, endDate, low
 }
 
 async function printReport(business, summary, lowStock, reportRange, reportStartDate, reportEndDate) {
-  const businessName = business?.name || "BizTrac Business";
+  const businessName = business?.name || "BizPurse Business";
   const periodLabel = reportRange === "monthly" ? "Monthly" : reportRange === "yearly" ? "Yearly" : reportRange === "custom" ? "Custom" : "Weekly";
   const html = buildReportHtml(summary, business, periodLabel, reportStartDate, reportEndDate, lowStock);
 
@@ -232,7 +232,7 @@ async function printReport(business, summary, lowStock, reportRange, reportStart
 }
 
 function buildReportCsv(summary, business, periodLabel, startDate, endDate, lowStock) {
-  const businessName = business?.name || "BizTrac Business";
+  const businessName = business?.name || "BizPurse Business";
   const lines = [];
 
   lines.push(`"BUSINESS NAME","${businessName.replace(/"/g, '""')}"`);
@@ -292,7 +292,7 @@ function buildReportCsv(summary, business, periodLabel, startDate, endDate, lowS
 }
 
 function exportReportCsv(business, summary, lowStock, reportRange, reportStartDate, reportEndDate) {
-  const businessName = business?.name || "BizTrac Business";
+  const businessName = business?.name || "BizPurse Business";
   const periodLabel = reportRange === "monthly" ? "Monthly" : reportRange === "yearly" ? "Yearly" : reportRange === "custom" ? "Custom" : "Weekly";
   const csvContent = buildReportCsv(summary, business, periodLabel, reportStartDate, reportEndDate, lowStock);
 

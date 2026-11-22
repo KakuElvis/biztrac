@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "BizTrac - Business Management & POS",
-  "short_name": "BizTrac",
+  "name": "BizPurse - Business Management & POS",
+  "short_name": "BizPurse",
   "description": "Mobile-first business management and POS application for Ghanaian SMEs.",
   "start_url": "/",
   "scope": "/",

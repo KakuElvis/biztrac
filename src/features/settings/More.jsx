@@ -34,12 +34,12 @@ import { StaffManagement } from "../staff/index.js";
 import { TaxSettingsModal } from "./TaxSettingsModal.jsx";
 
 const fallbackBusiness = {
-  name: "BizTrac",
+  name: "BizPurse",
   owner: "",
   phone: "",
   email: "",
   location: "",
-  logoText: "BT",
+  logoText: "BP",
 };
 
 const returnPolicyPresets = [
@@ -214,7 +214,7 @@ export function More({
 
   const handlePrintTestReceipt = () => {
     const testBusiness = {
-      name: form.name || business?.name || "BizTrac",
+      name: form.name || business?.name || "BizPurse",
       phone: form.phone || business?.phone || "",
       location: form.location || business?.location || "",
       receipt_width: form.receipt_width,
@@ -782,7 +782,7 @@ export function More({
                   <p className="font-bold text-black">
                     {form.receipt_footer || "Thank you for your patronage! Visit again."}
                   </p>
-                  <p className="text-[8px] text-slate-400">Powered by BizTrac</p>
+                  <p className="text-[8px] text-slate-400">Powered by BizPurse</p>
                 </div>
               </div>
             </div>
@@ -856,14 +856,14 @@ export function More({
             </Badge>
           </div>
           <p className="text-xs font-medium text-slate-600 leading-relaxed">
-            BizTrac is fully PWA-enabled. You can install it on Android, iOS, Windows, or Mac for standalone window execution, offline functionality, and quick launcher access.
+            BizPurse is fully PWA-enabled. You can install it on Android, iOS, Windows, or Mac for standalone window execution, offline functionality, and quick launcher access.
           </p>
           {pwaState?.canInstall || pwaState?.isIOS ? (
             <button
               onClick={pwaState.onInstallPwa}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-palm px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-palm/20 transition hover:bg-palmDeep"
             >
-              Install BizTrac App
+              Install BizPurse App
             </button>
           ) : pwaState?.needRefresh ? (
             <button

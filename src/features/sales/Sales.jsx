@@ -57,7 +57,7 @@ function toReceiptLine(line) {
 function buildReceiptText(receipt, business) {
   if (!receipt) return "";
   const money = (value) => formatCurrency(value, business?.currency);
-  const businessName = business?.name || "BizTrac";
+  const businessName = business?.name || "BizPurse";
   const businessDetails = [business?.phone, business?.location].filter(Boolean).join(" | ");
   const lines = (receipt.lines || [])
     .map(
@@ -135,7 +135,7 @@ function formatCurrency(value, currencyCode = "GHS") {
 
 function buildWhatsAppReceiptText(receipt, business) {
   const money = (value) => formatCurrency(value, business?.currency);
-  const businessName = business?.name || "BizTrac Business";
+  const businessName = business?.name || "BizPurse Business";
   const businessDetails = [business?.phone, business?.location].filter(Boolean).join(" | ");
 
   const lineItems = (receipt.lines || [])
@@ -293,7 +293,7 @@ function buildReceiptPdfFile(receipt, business) {
     "BT",
     "/F2 13 Tf",
     `16 ${height - 28} Td`,
-    `(${escapePdfText(business?.name || "BizTrac")}) Tj`,
+    `(${escapePdfText(business?.name || "BizPurse")}) Tj`,
     "/F1 9 Tf",
     ...lines.flatMap((line, index) => {
       const yOffset = index === 0 ? -22 : -14;
@@ -1844,7 +1844,7 @@ export function Sales({
 }
 
 function ReceiptPreview({ business, receipt, canViewProfit = true }) {
-  const businessName = business?.name || "BizTrac";
+  const businessName = business?.name || "BizPurse";
   const lines = receipt?.lines || [];
   const tin = receipt?.tinNumber || business?.tin_number;
   const vatRate = receipt?.vatRate !== undefined ? receipt.vatRate : (business?.vat_rate ?? 15);

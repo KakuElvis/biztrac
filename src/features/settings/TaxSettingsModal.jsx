@@ -234,7 +234,7 @@ export function TaxSettingsModal({
               <p className="text-xs text-slate-500 leading-relaxed">
                 {draft.vat_enabled
                   ? "Your POS counter, product catalog, sales receipts, and accounting will compute and itemize Ghana's statutory taxes. Recommended for VAT-registered stores."
-                  : "VAT is currently disabled. BizTrac will record sales and print receipts without any tax calculations or VAT lines. Suitable for informal or non-VAT registered retail shops."}
+                  : "VAT is currently disabled. BizPurse will record sales and print receipts without any tax calculations or VAT lines. Suitable for informal or non-VAT registered retail shops."}
               </p>
             </div>
           </label>

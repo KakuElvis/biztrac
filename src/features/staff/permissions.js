@@ -1,5 +1,5 @@
 /**
- * Staff & Role-Based Permissions Module for BizTrac
+ * Staff & Role-Based Permissions Module for BizPurse
  *
  * Defines the core roles and granular capability checks to protect sensitive
  * financial margins (cost prices, gross/net profits, financial reports)

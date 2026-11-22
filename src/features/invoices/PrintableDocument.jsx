@@ -84,11 +84,11 @@ export function PrintableDocument({ doc, business = {} }) {
                 />
               ) : (
                 <div className="inline-block bg-slate-900 text-white px-3 py-1.5 rounded-lg font-black text-lg tracking-wider uppercase mb-1">
-                  {business?.name || "BIZTRAC STORE"}
+                  {business?.name || "BIZPURSE STORE"}
                 </div>
               )}
               <h1 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-                {business?.name || "BizTrac Store"}
+                {business?.name || "BizPurse Store"}
               </h1>
               {business?.slogan && (
                 <p className="text-xs italic text-slate-500">{business.slogan}</p>
@@ -272,7 +272,7 @@ export function PrintableDocument({ doc, business = {} }) {
         <div className="pt-8 border-t border-slate-200 mt-6">
           <div className="flex flex-col sm:flex-row justify-between items-end gap-6 text-xs text-slate-500">
             <div>
-              <p className="font-bold text-slate-700">{business?.name || "BizTrac Store"}</p>
+              <p className="font-bold text-slate-700">{business?.name || "BizPurse Store"}</p>
               <p className="text-[11px]">Computer generated invoice. Valid without seal unless specified.</p>
             </div>
 

@@ -32,16 +32,16 @@ describe("Invoice Service", () => {
 
   it("generates formatted document numbers with proper prefixes", () => {
     const invNum = generateDocNumber("invoice");
-    expect(invNum).toMatch(/^BT-INV-\d{4}-[A-Z0-9]+$/);
+    expect(invNum).toMatch(/^BT-INV-\d{4}-\d{4}$/);
 
     const qtNum = generateDocNumber("quotation");
-    expect(qtNum).toMatch(/^BT-QT-\d{4}-[A-Z0-9]+$/);
+    expect(qtNum).toMatch(/^BT-QT-\d{4}-\d{4}$/);
 
     const recNum = generateDocNumber("receipt");
-    expect(recNum).toMatch(/^BT-REC-\d{4}-[A-Z0-9]+$/);
+    expect(recNum).toMatch(/^BT-REC-\d{4}-\d{4}$/);
 
     const piNum = generateDocNumber("proforma");
-    expect(piNum).toMatch(/^BT-PI-\d{4}-[A-Z0-9]+$/);
+    expect(piNum).toMatch(/^BT-PI-\d{4}-\d{4}$/);
   });
 
   it("creates initial invoice document with VAT defaults when business has VAT enabled", () => {
@@ -75,7 +75,7 @@ describe("Invoice Service", () => {
 
   it("saves, lists, updates status, and deletes an invoice in local cache", async () => {
     const doc = {
-      doc_number: "BT-INV-2026-1001",
+      doc_number: "BP-INV-2026-1001",
       doc_type: "invoice",
       status: "draft",
       customer_name: "Ama Mensah",
@@ -102,7 +102,7 @@ describe("Invoice Service", () => {
 
     const list = await listInvoices(businessId);
     expect(list.length).toBe(1);
-    expect(list[0].doc_number).toBe("BT-INV-2026-1001");
+    expect(list[0].doc_number).toBe("BP-INV-2026-1001");
 
     await updateInvoiceStatus(businessId, saved.id, "paid");
     const updatedList = await listInvoices(businessId);

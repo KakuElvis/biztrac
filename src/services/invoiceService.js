@@ -14,7 +14,7 @@ export function generateDocNumber(type = "invoice") {
   const year = new Date().getFullYear();
   const nonce = globalThis.crypto?.randomUUID?.().replaceAll("-", "").slice(0, 12).toUpperCase()
     || `${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-  return `BT-${prefix}-${year}-${nonce}`;
+  return `BP-${prefix}-${year}-${nonce}`;
 }
 
 export function getInitialInvoice(business = {}) {
@@ -27,7 +27,7 @@ export function getInitialInvoice(business = {}) {
   const defaultMomo = business?.momo_details?.trim()
     ? business.momo_details.trim()
     : business?.phone
-    ? `Mobile Money: ${business.phone}\nAccount Name: ${business?.name || "BizTrac Store"}`
+    ? `Mobile Money: ${business.phone}\nAccount Name: ${business?.name || "BizPurse Store"}`
     : "Mobile Money / Bank Transfer details on request";
 
   const defaultTerms =
