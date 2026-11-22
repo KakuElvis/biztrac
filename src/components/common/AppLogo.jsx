@@ -6,7 +6,7 @@ export function AppLogo({
   subtitleClassName = "text-xs font-semibold text-slate-500",
   subtitle = "Manage Today. Grow Tomorrow.",
   showText = true,
-  alt = "BizTrac logo",
+  alt = "BizPurse logo",
 }) {
   const logoUrl = new URL("../../assets/biztrac symbol.png", import.meta.url).href;
 
@@ -15,7 +15,7 @@ export function AppLogo({
       <img src={logoUrl} alt={alt} className={`shrink-0 ${imageClassName}`.trim()} />
       {showText ? (
         <div className="min-w-0">
-          <p className={titleClassName}>BizTrac</p>
+          <p className={titleClassName}>BizPurse</p>
           {subtitle ? <p className={subtitleClassName}>{subtitle}</p> : null}
         </div>
       ) : null}

@@ -17,11 +17,11 @@ export function usePWA() {
       const update = registerSW({
         onNeedRefresh() {
           setNeedRefresh(true);
-          showToast("A new version of BizTrac is available!", { type: "info" });
+          showToast("A new version of BizPurse is available!", { type: "info" });
         },
         onOfflineReady() {
           setOfflineReady(true);
-          showToast("BizTrac is ready for offline use", { type: "success" });
+          showToast("BizPurse is ready for offline use", { type: "success" });
         },
         onRegisterError(error) {
           console.warn("Service worker registration error:", error);
@@ -67,7 +67,7 @@ export function usePWA() {
       setDeferredPrompt(null);
       setCanInstall(false);
       setIsInstalled(true);
-      showToast("BizTrac app installed successfully!", { type: "success" });
+      showToast("BizPurse app installed successfully!", { type: "success" });
     };
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
@@ -94,7 +94,7 @@ export function usePWA() {
       if (choiceResult.outcome === "accepted") {
         setCanInstall(false);
         setDeferredPrompt(null);
-        showToast("Installing BizTrac...", { type: "info" });
+        showToast("Installing BizPurse...", { type: "info" });
         return true;
       }
     } catch (err) {

@@ -45,7 +45,7 @@ export const sampleTestReceipt = {
 
 export function buildReceiptHtml(receipt, business) {
   if (!receipt || typeof receipt !== "object") return "";
-  const businessName = escapeHtml(business?.name || "BizTrac");
+  const businessName = escapeHtml(business?.name || "BizPurse");
   const businessDetails = escapeHtml([business?.phone, business?.location].filter(Boolean).join(" • "));
   const is80mm = business?.receipt_width === "80mm";
   const paperWidthCss = is80mm ? "72mm" : "48mm";
@@ -227,7 +227,7 @@ export function buildReceiptHtml(receipt, business) {
           <div class="footer">
             ${business?.return_policy ? `<p style="margin: 2px 0;">${escapeHtml(business.return_policy)}</p>` : ""}
             <p style="margin: 4px 0; font-weight: bold;">${escapeHtml(business?.receipt_footer || "Thank you for buying from us! Visit again.")}</p>
-            <p style="margin: 2px 0; font-size: 8px; color: #555;">Powered by BizTrac</p>
+            <p style="margin: 2px 0; font-size: 8px; color: #555;">Powered by BizPurse</p>
           </div>
         </main>
       </body>

@@ -154,7 +154,7 @@ export default function App() {
         // First press: retain trap and show toast warning
         lastBackPressRef.current = now;
         window.history.pushState({ screen: "dashboard" }, "", url.toString());
-        showToast("Press back again to exit BizTrac", { type: "info", duration: 2000 });
+        showToast("Press back again to exit BizPurse", { type: "info", duration: 2000 });
         return;
       }
 
@@ -358,7 +358,7 @@ export default function App() {
             imageClassName="h-16 w-16 rounded-3xl object-cover shadow-lg shadow-palm/20"
           />
           <p className="text-sm font-bold text-palm">
-            {isLoading ? "Opening BizTrac" : "Loading your workspace"}
+            {isLoading ? "Opening BizPurse" : "Loading your workspace"}
           </p>
         </div>
       </main>

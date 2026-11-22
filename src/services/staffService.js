@@ -549,7 +549,7 @@ export async function addStaffMember(
     phone: newMember.phone,
     email: newMember.email,
     businessId,
-    businessName: businessName || "BizTrac Store",
+    businessName: businessName || "BizPurse Store",
     createdAt: newMember.createdAt,
   };
 
@@ -631,7 +631,7 @@ export async function loginWithStaffId({ staffId, password }) {
               fullName: staff.full_name,
               role: normalizeRole(staff.role),
               phone: staff.phone || "",
-              email: staff.email || `${staff.staff_id.toLowerCase()}@biztrac.staff`,
+              email: staff.email || `${staff.staff_id.toLowerCase()}@bizpurse.staff`,
               isStaff: true,
               user_metadata: {
                 full_name: staff.full_name,
@@ -644,7 +644,7 @@ export async function loginWithStaffId({ staffId, password }) {
               role: normalizeRole(staff.role),
               business: toBusiness(biz) || {
                 id: staff.business_id,
-                name: "BizTrac Store",
+                name: "BizPurse Store",
                 currency: "GHS",
                 location: "",
                 phone: "",
@@ -767,7 +767,7 @@ export async function loginWithStaffId({ staffId, password }) {
       fullName: foundMember.fullName,
       role: normalizeRole(foundMember.role),
       phone: foundMember.phone || "",
-      email: foundMember.email || `${foundMember.staffId.toLowerCase()}@biztrac.staff`,
+      email: foundMember.email || `${foundMember.staffId.toLowerCase()}@bizpurse.staff`,
       isStaff: true,
       user_metadata: {
         full_name: foundMember.fullName,
@@ -780,7 +780,7 @@ export async function loginWithStaffId({ staffId, password }) {
       role: normalizeRole(foundMember.role),
       business: cachedBusiness || {
         id: foundMember.businessId,
-        name: foundMember.businessName || "BizTrac Store",
+        name: foundMember.businessName || "BizPurse Store",
         currency: "GHS",
         location: "",
         phone: "",

@@ -40,7 +40,7 @@ export function PwaBanner({ _canInstall, isInstalled, isIOS, needRefresh, onInst
                 <Smartphone className="h-6 w-6" />
               </div>
               <div className="min-w-0">
-                <p className="truncate text-sm font-black text-ink">Install BizTrac App</p>
+                <p className="truncate text-sm font-black text-ink">Install BizPurse App</p>
                 <p className="truncate text-xs font-medium text-slate-500">
                   Offline access & fast app mode
                 </p>
@@ -102,7 +102,7 @@ export function PwaBanner({ _canInstall, isInstalled, isIOS, needRefresh, onInst
                   <Laptop className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-base font-black text-ink">Install BizTrac Application</p>
+                  <p className="text-base font-black text-ink">Install BizPurse Application</p>
                   <p className="text-xs font-medium text-slate-500">Standalone App & Offline Access</p>
                 </div>
               </div>
@@ -117,7 +117,7 @@ export function PwaBanner({ _canInstall, isInstalled, isIOS, needRefresh, onInst
             {isIOS ? (
               <div className="space-y-3">
                 <p className="text-xs font-semibold text-slate-600">
-                  To install BizTrac on iPhone or iPad (Safari):
+                  To install BizPurse on iPhone or iPad (Safari):
                 </p>
                 <ol className="space-y-2 text-xs font-semibold text-slate-700">
                   <li className="flex items-start gap-2.5 rounded-xl bg-slate-50 p-3 border border-slate-100">
@@ -149,7 +149,7 @@ export function PwaBanner({ _canInstall, isInstalled, isIOS, needRefresh, onInst
             ) : (
               <div className="space-y-3">
                 <p className="text-xs font-semibold text-slate-600">
-                  Install BizTrac directly from your browser:
+                  Install BizPurse directly from your browser:
                 </p>
                 <div className="space-y-2 text-xs font-semibold text-slate-700">
                   <div className="rounded-xl bg-skyglass p-3 border border-palm/20 space-y-1">
@@ -157,7 +157,7 @@ export function PwaBanner({ _canInstall, isInstalled, isIOS, needRefresh, onInst
                       <Monitor className="h-4 w-4" /> Desktop Chrome / Edge / Brave:
                     </p>
                     <p className="text-slate-600 leading-normal">
-                      Click the <strong className="text-ink">Install Icon</strong> (computer icon with down arrow) located on the right side of your browser address URL bar, or click menu (⋮) &rarr; <em>Install BizTrac</em>.
+                      Click the <strong className="text-ink">Install Icon</strong> (computer icon with down arrow) located on the right side of your browser address URL bar, or click menu (⋮) &rarr; <em>Install BizPurse</em>.
                     </p>
                   </div>
                   <div className="rounded-xl bg-slate-50 p-3 border border-slate-200 space-y-1">
@@ -214,7 +214,7 @@ export function PwaInstallButton({ _canInstall, isInstalled, _isIOS, onInstall, 
         )}
       >
         <Download className="h-4 w-4" />
-        <span>Install BizTrac App</span>
+        <span>Install BizPurse App</span>
       </button>
 
       {showModal ? (
@@ -227,7 +227,7 @@ export function PwaInstallButton({ _canInstall, isInstalled, _isIOS, onInstall, 
               </button>
             </div>
             <p className="text-xs text-slate-600">
-              Click the <strong>Install</strong> icon in your browser address bar (top right) or browser menu (⋮) &rarr; <strong>Install BizTrac</strong>.
+              Click the <strong>Install</strong> icon in your browser address bar (top right) or browser menu (⋮) &rarr; <strong>Install BizPurse</strong>.
             </p>
             <button
               onClick={() => setShowModal(false)}

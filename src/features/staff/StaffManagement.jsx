@@ -268,7 +268,7 @@ export function StaffManagement({
                     )}
                   </div>
                   <h4 className="text-sm font-black text-ink">
-                    {isSimulatingCashier ? "Currently in Cashier View" : "Preview BizTrac as Cashier"}
+                    {isSimulatingCashier ? "Currently in Cashier View" : "Preview BizPurse as Cashier"}
                   </h4>
                   <p className="text-xs text-slate-600 mt-0.5">
                     {isSimulatingCashier
@@ -888,7 +888,7 @@ export function StaffManagement({
               <button
                 type="button"
                 onClick={() => {
-                  const text = `BizTrac Counter Terminal Login:\nBusiness: ${business?.name || "Our Store"}\nStaff Name: ${createdStaffCredentials.fullName}\nStaff ID: ${createdStaffCredentials.staffId}\nPassword: ${createdStaffCredentials.password}\nRole: ${ROLE_METADATA[createdStaffCredentials.role]?.label || "Cashier"}`;
+                  const text = `BizPurse Counter Terminal Login:\nBusiness: ${business?.name || "Our Store"}\nStaff Name: ${createdStaffCredentials.fullName}\nStaff ID: ${createdStaffCredentials.staffId}\nPassword: ${createdStaffCredentials.password}\nRole: ${ROLE_METADATA[createdStaffCredentials.role]?.label || "Cashier"}`;
                   navigator.clipboard.writeText(text);
                   showToast("Copied all login credentials! Ready to paste into WhatsApp/SMS.", { type: "success" });
                 }}

@@ -222,7 +222,7 @@ export function Invoices({
     };
 
     const typeLabel = typeLabels[doc.doc_type] || "INVOICE";
-    const storeName = business?.name || "BizTrac Store";
+    const storeName = business?.name || "BizPurse Store";
 
     const message = encodeURIComponent(
       `Hello ${doc.customer_name || "Valued Customer"},\n\n` +
@@ -618,7 +618,7 @@ export function Invoices({
                   </div>
                 </div>
 
-                {/* Quick Autofill from existing BizTrac customers */}
+                {/* Quick Autofill from existing BizPurse customers */}
                 <CustomerPicker
                   customers={customers}
                   selectedName={doc.customer_name}

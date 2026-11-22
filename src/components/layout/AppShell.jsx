@@ -157,13 +157,13 @@ export function AppShell({
 
         <main className="w-full">
           <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
-            {/* Mobile Header: BizTrac Logo on left, Hamburger Menu on right (matches reference mockup) */}
+            {/* Mobile Header: BizPurse Logo on left, Hamburger Menu on right (matches reference mockup) */}
             <div className="screen-pad mx-auto flex h-16 max-w-5xl items-center justify-between lg:hidden">
               <button
                 type="button"
                 onClick={() => onNavigate("dashboard")}
                 className="flex items-center text-left focus:outline-none focus:ring-2 focus:ring-palm/20 rounded-xl transition active:scale-98"
-                aria-label="BizTrac home"
+                aria-label="BizPurse home"
               >
                 <AppLogo
                   imageClassName="h-9 w-9 rounded-xl border-2 border-ink/50 object-contain shadow-xs"
@@ -220,7 +220,7 @@ export function AppShell({
                   <button
                     onClick={onInstallPwa}
                     className="inline-flex items-center gap-1.5 rounded-xl border border-palm/30 bg-skyglass px-2.5 py-1.5 text-xs font-bold text-palm transition hover:bg-palm hover:text-white"
-                    title="Install BizTrac App"
+                    title="Install BizPurse App"
                   >
                     <Smartphone className="h-4 w-4" />
                     <span className="hidden sm:inline">Install App</span>
@@ -418,10 +418,10 @@ export function AppShell({
             <div className="border-b border-slate-100 bg-slate-50/70 p-4">
               <div className="flex items-center gap-3">
                 <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-palm text-xs font-black text-white shadow-xs">
-                  {business?.logoText || "BT"}
+                  {business?.logoText || "BP"}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-black text-ink">{business?.name || "BizTrac Store"}</p>
+                  <p className="truncate text-sm font-black text-ink">{business?.name || "BizPurse Store"}</p>
                   {business?.location ? (
                     <p className="truncate text-xs font-medium text-slate-500">{business.location}</p>
                   ) : null}
@@ -503,7 +503,7 @@ export function AppShell({
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-palm/30 bg-skyglass px-3 py-2.5 text-xs font-bold text-palm hover:bg-palm hover:text-white transition"
                 >
                   <Smartphone className="h-4 w-4" />
-                  <span>Install BizTrac App</span>
+                  <span>Install BizPurse App</span>
                 </button>
               ) : null}
 

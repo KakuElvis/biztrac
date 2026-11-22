@@ -44,7 +44,7 @@ function isValidPhone(value) {
 }
 
 function buildDebtWhatsAppText(receipt, business) {
-  const businessName = (business?.name || "BizTrac").toUpperCase();
+  const businessName = (business?.name || "BizPurse").toUpperCase();
   const dateStr = new Date(receipt.createdAt).toLocaleDateString("en-GB", {
     dateStyle: "medium",
   });
@@ -74,7 +74,7 @@ function buildDebtWhatsAppText(receipt, business) {
 }
 
 function buildCustomerWhatsAppStatement(customer, metrics, purchases = [], business) {
-  const businessName = (business?.name || "BizTrac").toUpperCase();
+  const businessName = (business?.name || "BizPurse").toUpperCase();
   const dateStr = new Date().toLocaleDateString("en-GB", { dateStyle: "medium" });
   const lines = [
     `📊 *ACCOUNT STATEMENT - ${businessName}*`,
@@ -109,7 +109,7 @@ function buildCustomerWhatsAppStatement(customer, metrics, purchases = [], busin
 }
 
 function buildDebtReceiptHtml(receipt, business) {
-  const businessName = escapeHtml(business?.name || "BizTrac");
+  const businessName = escapeHtml(business?.name || "BizPurse");
   const businessDetails = escapeHtml([business?.phone, business?.location].filter(Boolean).join(" • "));
   const dateStr = new Date(receipt.createdAt).toLocaleDateString("en-GB", {
     dateStyle: "medium",
@@ -189,7 +189,7 @@ function buildDebtReceiptHtml(receipt, business) {
           <div class="footer">
             ${business?.return_policy ? `<p style="margin: 2px 0;">${escapeHtml(business.return_policy)}</p>` : ""}
             <p style="margin: 4px 0; font-weight: bold;">${escapeHtml(business?.receipt_footer || "Thank you for your payment.")}</p>
-            <p style="margin: 2px 0; font-size: 8px; color: #555;">Powered by BizTrac</p>
+            <p style="margin: 2px 0; font-size: 8px; color: #555;">Powered by BizPurse</p>
           </div>
         </main>
       </body>
@@ -1380,7 +1380,7 @@ export function Customers({
                   className="icon-button h-8 w-8 text-emerald-600 bg-emerald-50 border-emerald-200/80 hover:bg-emerald-100"
                   onClick={() => {
                     const phoneDigits = formatWhatsAppPhone(c.phone);
-                    const msg = `Hello ${c.name}, this is a friendly reminder from BizTrac regarding your outstanding balance of ${formatCurrency(c.debt)}. Kindly make payment at your earliest convenience. Thank you!`;
+                    const msg = `Hello ${c.name}, this is a friendly reminder from BizPurse regarding your outstanding balance of ${formatCurrency(c.debt)}. Kindly make payment at your earliest convenience. Thank you!`;
                     window.open(`https://wa.me/${phoneDigits}?text=${encodeURIComponent(msg)}`, "_blank");
                   }}
                 >

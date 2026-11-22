@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("BizTrac E2E App Flow", () => {
+test.describe("BizPurse E2E App Flow", () => {
   test("renders authentication screen for unauthenticated users", async ({ page }) => {
     await page.goto("/");
 
