@@ -6,6 +6,7 @@ const variants = {
   red: "bg-red-50 text-red-700 ring-red-100",
   blue: "bg-primary/10 text-primary ring-primary/20",
   slate: "bg-slate-100 text-slate-600 ring-slate-200",
+  pro: "bg-gradient-to-r from-amber-500 to-amber-600 text-white ring-amber-400/50 shadow-xs",
 };
 
 export function Badge({ children, variant = "slate", className = "" }) {

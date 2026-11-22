@@ -2,6 +2,10 @@ import { useEffect, useState, useCallback, useRef, Suspense, lazy } from "react"
 import { AppLogo } from "./components/common/AppLogo.jsx";
 import { AppShell } from "./components/layout/AppShell.jsx";
 import { ErrorBoundary } from "./components/common/ErrorBoundary.jsx";
+import { usePlan } from "./hooks/usePlan.js";
+import { UpgradeModal } from "./components/subscription/UpgradeModal.jsx";
+import { ProGate } from "./components/common/ProGate.jsx";
+import { PRO_FEATURES } from "./lib/plans.js";
 import { AuthScreen, PasswordRecoveryScreen } from "./features/auth/AuthScreen.jsx";
 import { getRepository } from "./services/repositories/dataRepository.js";
 import { useAuthSession } from "./hooks/useAuthSession.js";
@@ -69,6 +73,12 @@ export default function App() {
   } = useAuthSession();
 
   const [activeScreen, setActiveScreen] = useState(getScreenFromUrl);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const plan = usePlan(business);
+
+  const handlePlanUpdated = (updatedBusiness) => {
+    setWorkspace((prev) => (prev ? { ...prev, business: updatedBusiness } : prev));
+  };
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   const [previewRole, setPreviewRole] = useState(null);
   const lastBackPressRef = useRef(0);
@@ -395,11 +405,22 @@ export default function App() {
       permissions={permissions}
       previewRole={previewRole}
       onSetPreviewRole={setPreviewRole}
+      plan={plan}
+      onOpenUpgradeModal={() => setIsUpgradeModalOpen(true)}
     >
       <ErrorBoundary>
         <Suspense fallback={<div className="p-6">Loading...</div>}>
-          <Screen
+          {activeScreen === "invoices" && !plan.canAccess(PRO_FEATURES.INVOICING) ? (
+            <ProGate
+              business={business}
+              feature={PRO_FEATURES.INVOICING}
+              onUpgrade={() => setIsUpgradeModalOpen(true)}
+            />
+          ) : (
+            <Screen
           business={business}
+          plan={plan}
+          onOpenUpgradeModal={() => setIsUpgradeModalOpen(true)}
           currentUser={session?.user}
           permissions={permissions}
           previewRole={previewRole}
@@ -471,8 +492,15 @@ export default function App() {
           onPageSizeChange={setPageSize}
           pwaState={pwaState}
         />
+          )}
         </Suspense>
       </ErrorBoundary>
+      <UpgradeModal
+        isOpen={isUpgradeModalOpen}
+        onClose={() => setIsUpgradeModalOpen(false)}
+        business={business}
+        onPlanUpdated={handlePlanUpdated}
+      />
     </AppShell>
   );
 }

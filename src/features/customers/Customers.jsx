@@ -408,21 +408,31 @@ export function Customers({
       return;
     }
 
+    const currentDebt = Number(activePaymentCustomer?.debt || 0);
+    if (amountNum > currentDebt) {
+      setPayError(`Payment cannot exceed outstanding debt of ${formatCurrency(currentDebt)}.`);
+      return;
+    }
+
     try {
       setPaySubmitting(true);
+      let appliedAmount = amountNum;
       if (onPayDebt && activePaymentCustomer) {
-        await onPayDebt(activePaymentCustomer.id, amountNum, payMethod);
+        const result = await onPayDebt(activePaymentCustomer.id, amountNum, payMethod);
+        if (typeof result === "number" && result >= 0) {
+          appliedAmount = result;
+        }
       }
 
       const ref = `DP-${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}`;
-      const prevDebt = activePaymentCustomer.debt || 0;
-      const remDebt = Math.max(0, prevDebt - amountNum);
+      const prevDebt = currentDebt;
+      const remDebt = Math.max(0, prevDebt - appliedAmount);
 
       const receiptData = {
         reference: ref,
         customerName: activePaymentCustomer.name,
         customerPhone: activePaymentCustomer.phone,
-        amountPaid: amountNum,
+        amountPaid: appliedAmount,
         previousDebt: prevDebt,
         remainingDebt: remDebt,
         paymentMethod: payMethod,

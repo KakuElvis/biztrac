@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import {
+  Crown,
+  Sparkles,
   BarChart3,
   Boxes,
   Home,
@@ -56,6 +58,8 @@ export function AppShell({
   pwaState = {},
   permissions,
   onSetPreviewRole,
+  plan,
+  onOpenUpgradeModal,
 }) {
   const [showConflictModal, setShowConflictModal] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
@@ -113,6 +117,11 @@ export function AppShell({
                 item={{ id: "invoices", label: "Invoices & Quotes", icon: FileText }}
                 active={activeScreen === "invoices"}
                 onClick={() => onNavigate("invoices")}
+                badge={!plan?.isPro ? (
+                  <span className="rounded-md bg-amber-500/15 text-amber-700 px-1.5 py-0.5 text-[10px] font-black uppercase">
+                    PRO
+                  </span>
+                ) : null}
               />
             )}
             {!isCashier && (
@@ -171,14 +180,29 @@ export function AppShell({
                   subtitle={null}
                 />
               </button>
-              <button
-                type="button"
-                onClick={() => setIsMobileDrawerOpen(true)}
-                className="grid h-11 w-11 place-items-center rounded-xl text-slate-900 transition hover:bg-slate-100 active:scale-95 focus:outline-none focus:ring-2 focus:ring-palm/20"
-                aria-label="Open navigation menu"
-              >
-                <Menu className="h-6 w-6" strokeWidth={2.4} />
-              </button>
+              <div className="flex items-center gap-2">
+                {plan?.isPro ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 px-2 py-0.5 text-[10px] font-black uppercase text-white shadow-xs">
+                    <Crown className="h-3 w-3" /> PRO
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onOpenUpgradeModal}
+                    className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-800 active:scale-95"
+                  >
+                    <Sparkles className="h-3 w-3 text-amber-600" /> Pro
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsMobileDrawerOpen(true)}
+                  className="grid h-11 w-11 place-items-center rounded-xl text-slate-900 transition hover:bg-slate-100 active:scale-95 focus:outline-none focus:ring-2 focus:ring-palm/20"
+                  aria-label="Open navigation menu"
+                >
+                  <Menu className="h-6 w-6" strokeWidth={2.4} />
+                </button>
+              </div>
             </div>
 
             {/* Desktop Header */}
@@ -191,6 +215,19 @@ export function AppShell({
                   <p className="truncate text-sm font-black text-ink">{business.name}</p>
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate text-xs font-medium text-slate-500">{business.location}</p>
+                    {plan?.isPro ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white shadow-xs">
+                        <Crown className="h-3 w-3" /> PRO
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={onOpenUpgradeModal}
+                        className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-800 transition hover:bg-amber-100 hover:border-amber-400 active:scale-95"
+                      >
+                        <Sparkles className="h-3 w-3 text-amber-600" /> Upgrade
+                      </button>
+                    )}
                     {permissions?.roleMeta && (
                       <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border ${permissions.roleMeta.badgeBg}`}>
                         {permissions.roleMeta.shortLabel}
@@ -349,7 +386,7 @@ export function AppShell({
             ) : null}
           </div>
 
-          <div className="screen-pad mx-auto max-w-5xl py-5 sm:py-7">{children}</div>
+          <div className="screen-pad mx-auto max-w-5xl pt-5 sm:pt-7 pb-24 lg:pb-8">{children}</div>
         </main>
       </div>
 
@@ -493,6 +530,27 @@ export function AppShell({
 
             {/* Drawer Footer */}
             <div className="border-t border-slate-100 p-4 space-y-2 bg-slate-50/50">
+              {!plan?.isPro && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileDrawerOpen(false);
+                    onOpenUpgradeModal?.();
+                  }}
+                  className="flex w-full items-center justify-between rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 p-3 text-white shadow-md shadow-amber-500/20 transition hover:from-amber-600 hover:to-amber-700"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Crown className="h-5 w-5 text-amber-100" />
+                    <div className="text-left">
+                      <p className="text-xs font-black">Upgrade to BizTrac Pro</p>
+                      <p className="text-[10px] text-amber-100">Invoices, staff PINs & margins</p>
+                    </div>
+                  </div>
+                  <span className="rounded-md bg-white/20 px-2 py-0.5 text-[10px] font-black uppercase">
+                    Go Pro
+                  </span>
+                </button>
+              )}
               {(canInstall || isIOS) && !isInstalled ? (
                 <button
                   type="button"
@@ -650,19 +708,22 @@ function Brand() {
   );
 }
 
-function NavButton({ item, active, onClick }) {
+function NavButton({ item, active, onClick, badge }) {
   const Icon = item.icon;
 
   return (
     <button
       className={classNames(
-        "flex min-h-12 w-full items-center gap-3 rounded-xl px-4 text-sm font-bold transition",
+        "flex min-h-12 w-full items-center justify-between rounded-xl px-4 text-sm font-bold transition",
         active ? "bg-palm text-white shadow-lg shadow-palm/20" : "text-slate-600 hover:bg-slate-100 hover:text-ink"
       )}
       onClick={onClick}
     >
-      <Icon className="h-5 w-5" />
-      {item.label}
+      <div className="flex items-center gap-3">
+        <Icon className="h-5 w-5" />
+        <span>{item.label}</span>
+      </div>
+      {badge}
     </button>
   );
 }

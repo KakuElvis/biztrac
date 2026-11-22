@@ -31,15 +31,29 @@ export function PrintableDocument({ doc, business = {} }) {
             padding: 0 !important;
             background: #fff !important;
           }
-          body > * { display: none !important; }
-          body > .printable-document-root { display: block !important; }
-          .printable-document-root { position: static !important; }
+          body * {
+            visibility: hidden;
+          }
+          .printable-document-root,
+          .printable-document-root * {
+            visibility: visible;
+          }
+          .printable-document-root {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+            display: block !important;
+          }
           #printable-invoice-sheet {
             position: static !important;
             width: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
-            padding: 24px !important;
+            padding: 20px !important;
             box-shadow: none !important;
             border: none !important;
             page-break-after: auto;

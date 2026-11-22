@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import {
+  Crown,
+  Sparkles,
   AlertCircle,
   BarChart3,
   Bell,
@@ -91,6 +93,8 @@ export function More({
   onSignOut,
   onUpdateBusiness,
   pwaState,
+  plan,
+  onOpenUpgradeModal,
 }) {
   const debtors = dashboardSummary?.debtors || [];
   const [form, setForm] = useState(() => toBusinessForm(business));
@@ -235,6 +239,38 @@ export function More({
         <h1 className="mt-1 text-3xl font-black tracking-normal text-ink">Workspace</h1>
       </section>
 
+      {/* Subscription & Plan Status Card */}
+      <section className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50/80 via-white to-amber-50/40 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-500 text-white shadow-md shadow-amber-500/25">
+            <Crown className="h-6 w-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-base font-black text-slate-900">
+                {plan?.isPro ? "BizTrac Pro Store" : "BizTrac Free Store"}
+              </p>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${plan?.isPro ? "bg-amber-500 text-white" : "bg-slate-200 text-slate-700"}`}>
+                {plan?.isPro ? "Active" : "Free"}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {plan?.isPro
+                ? `${plan.daysRemaining} days remaining on your Pro subscription.`
+                : "Free plan: 1 staff account & 50 products limit. Upgrade for unlimited power."}
+            </p>
+          </div>
+        </div>
+        <Button
+          variant="primary"
+          icon={Crown}
+          className="bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-amber-500/20 hover:from-amber-600 hover:to-amber-700 shrink-0"
+          onClick={onOpenUpgradeModal}
+        >
+          {plan?.isPro ? "Manage Plan" : "Upgrade to Pro"}
+        </Button>
+      </section>
+
       {/* Business Overview Header Card */}
       <section className="panel p-4 sm:p-5">
         <div className="flex items-start gap-4">
@@ -245,6 +281,11 @@ export function More({
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-black text-ink">{business.name}</h2>
               <Badge variant="green">Active</Badge>
+              {plan?.isPro ? (
+                <Badge variant="pro">PRO PLAN</Badge>
+              ) : (
+                <Badge variant="slate">FREE PLAN</Badge>
+              )}
             </div>
             <p className="mt-1 text-sm font-semibold text-slate-500">{business.owner}</p>
             <div className="mt-4 grid gap-2 text-sm font-semibold text-slate-600 sm:grid-cols-3">
@@ -865,6 +906,7 @@ export function More({
         onSetPreviewRole={onSetPreviewRole}
         isOpen={isStaffModalOpen}
         onClose={() => setIsStaffModalOpen(false)}
+        onOpenUpgradeModal={onOpenUpgradeModal}
       />
 
       <TaxSettingsModal

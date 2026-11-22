@@ -63,6 +63,8 @@ export function Dashboard({
   products = [],
   productsLoading,
   onNavigate,
+  plan,
+  onOpenUpgradeModal,
 }) {
   const effectiveIsCashier = Boolean(isCashier || permissions?.isCashier);
   const summary = dashboardSummary || emptyDashboardSummary;
@@ -131,7 +133,7 @@ export function Dashboard({
             onClick={() => onNavigate("inventory")}
           />
         )}
-        {canViewProfit ? (
+        {canViewProfit && (!plan || plan.isPro) ? (
           <MetricCard
             label="Estimated profit"
             value={formatCurrency(summary.estimatedProfit)}
@@ -141,6 +143,34 @@ export function Dashboard({
             trend={summary.estimatedProfit < 0 ? "down" : "up"}
             onClick={() => onNavigate("reports")}
           />
+        ) : !effectiveIsCashier && (!plan || !plan.isPro) ? (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={onOpenUpgradeModal}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") onOpenUpgradeModal?.();
+            }}
+            className="group relative flex cursor-pointer flex-col justify-between overflow-hidden rounded-2xl border border-dashed border-amber-300 bg-amber-50/70 p-5 transition hover:border-amber-400 hover:bg-amber-100/70 shadow-xs"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-500">Estimated profit</span>
+              <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-black text-white shadow-xs">
+                PRO
+              </span>
+            </div>
+            <div className="my-2">
+              <p className="text-xl font-black text-slate-900 group-hover:text-amber-900">
+                🔒 Unlock Profit
+              </p>
+              <p className="text-[11px] font-medium text-slate-500 mt-0.5">
+                Track gross & net profit margins
+              </p>
+            </div>
+            <span className="inline-flex items-center text-xs font-black text-amber-700 group-hover:underline">
+              Upgrade store &rarr;
+            </span>
+          </div>
         ) : (
           <MetricCard
             label="Items sold today"

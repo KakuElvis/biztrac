@@ -211,7 +211,7 @@ export function Invoices({
     const formattedPhone = formatWhatsAppPhone(doc.customer_phone);
 
     const itemsSummary = (doc.items || [])
-      .map((i) => `â€¢ ${i.quantity}x ${i.description || "Item"} â€” ${formatCurrency(i.line_total)}`)
+      .map((i) => `• ${i.quantity}x ${i.description || "Item"} — ${formatCurrency(i.line_total)}`)
       .join("\n");
 
     const typeLabels = {
@@ -227,15 +227,15 @@ export function Invoices({
     const message = encodeURIComponent(
       `Hello ${doc.customer_name || "Valued Customer"},\n\n` +
       `Here is your *${typeLabel}* from *${storeName}*:\n\n` +
-      `ðŸ“„ *Doc #:* ${doc.doc_number}\n` +
-      `ðŸ“… *Date:* ${doc.issue_date}\n` +
-      (doc.due_date ? `â° *Due / Valid Until:* ${doc.due_date}\n\n` : `\n`) +
-      `ðŸ“¦ *Items:*\n${itemsSummary}\n\n` +
-      (Number(doc.discount_amount) > 0 ? `ðŸ·ï¸ *Discount:* -${formatCurrency(doc.discount_amount)}\n` : "") +
-      (Number(doc.tax_rate) > 0 ? `ðŸ›ï¸ *Tax / VAT (${doc.tax_rate}%):* ${formatCurrency(doc.tax_amount)}\n` : "") +
-      `ðŸ’° *Total Amount Due:* ${formatCurrency(doc.total_amount)}\n\n` +
-      (doc.bank_momo_details ? `ðŸ’³ *Payment Details:*\n${doc.bank_momo_details}\n\n` : "") +
-      (doc.payment_terms ? `ðŸ“‹ *Terms:*\n${doc.payment_terms}\n\n` : "") +
+      `📄 *Doc #:* ${doc.doc_number}\n` +
+      `📅 *Date:* ${doc.issue_date}\n` +
+      (doc.due_date ? `⏳ *Due / Valid Until:* ${doc.due_date}\n\n` : `\n`) +
+      `📦 *Items:*\n${itemsSummary}\n\n` +
+      (Number(doc.discount_amount) > 0 ? `🏷️ *Discount:* -${formatCurrency(doc.discount_amount)}\n` : "") +
+      (Number(doc.tax_rate) > 0 ? `🏛️ *Tax / VAT (${doc.tax_rate}%):* ${formatCurrency(doc.tax_amount)}\n` : "") +
+      `💰 *Total Amount Due:* ${formatCurrency(doc.total_amount)}\n\n` +
+      (doc.bank_momo_details ? `💳 *Payment Details:*\n${doc.bank_momo_details}\n\n` : "") +
+      (doc.payment_terms ? `📋 *Terms:*\n${doc.payment_terms}\n\n` : "") +
       `Thank you for choosing ${storeName}!`
     );
 
@@ -448,7 +448,7 @@ export function Invoices({
             className="flex items-center gap-1.5 px-4 py-2 bg-palm hover:bg-palm/90 text-white text-xs font-black rounded-xl transition-colors shadow-xs disabled:opacity-60"
           >
             <Save className="h-3.5 w-3.5" />
-            <span>{saving ? "Savingâ€¦" : "Save Document"}</span>
+            <span>{saving ? "Saving..." : "Save Document"}</span>
           </button>
         </div>
       </div>
@@ -529,15 +529,23 @@ export function Invoices({
                       >
                         {item.status}
                       </span>
+                      {item.sync_status === "needs_sync" && (
+                        <span
+                          className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs"
+                          title="Saved locally on this device only. Reconnect to sync."
+                        >
+                          Offline Draft
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs font-bold text-slate-800">{item.customer_name}</p>
                     <div className="flex items-center gap-3 text-[11px] text-slate-500">
-                      <span>Tel: {item.customer_phone || "â€”"}</span>
-                      <span>â€¢</span>
+                      <span>Tel: {item.customer_phone || "—"}</span>
+                      <span>•</span>
                       <span>Date: {item.issue_date}</span>
                       {item.due_date && (
                         <>
-                          <span>â€¢</span>
+                          <span>•</span>
                           <span>Due: {item.due_date}</span>
                         </>
                       )}
@@ -767,7 +775,7 @@ export function Invoices({
                               onChange={(e) => handleItemChange(idx, "unit_price", e.target.value)}
                               className="w-full border border-slate-200 rounded-xl p-2 bg-white text-right font-mono font-bold focus:outline-none focus:border-palm"
                               placeholder="Unit Price"
-                              title="Unit Price in GHâ‚µ"
+                              title="Unit Price in GH₵"
                             />
                           </div>
 
@@ -803,7 +811,7 @@ export function Invoices({
                 </h3>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Discount (GHâ‚µ)</label>
+                  <label className="block font-bold text-slate-700 mb-1">Discount (GH₵)</label>
                   <input
                     type="number"
                     min="0"
