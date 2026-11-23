@@ -103,7 +103,7 @@ export function AdminLoginScreen({ onSwitchToMerchant, onLoginSuccess }) {
           </div>
 
           <h1 className="text-2xl font-black text-white tracking-tight">
-            BizTrac Operations
+            BizPurse Operations
           </h1>
           <p className="text-xs text-slate-400 font-medium mt-1">
             Super Administrator Control Portal
@@ -152,7 +152,7 @@ export function AdminLoginScreen({ onSwitchToMerchant, onLoginSuccess }) {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@biztrac.app"
+                  placeholder="admin@bizpurse.app"
                   required
                   autoFocus
                   autoComplete="username email"
@@ -242,7 +242,7 @@ export function AdminLoginScreen({ onSwitchToMerchant, onLoginSuccess }) {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@biztrac.app"
+                  placeholder="admin@bizpurse.app"
                   required
                   autoFocus
                   className="w-full h-12 bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 text-sm font-semibold text-white placeholder:text-slate-600 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition"
@@ -306,7 +306,7 @@ export function AdminLoginScreen({ onSwitchToMerchant, onLoginSuccess }) {
 
       {/* Footer copyright */}
       <footer className="mt-8 text-center text-xs text-slate-600 font-medium">
-        BizTrac Platform Infrastructure &copy; {new Date().getFullYear()}
+        BizPurse Platform Infrastructure &copy; {new Date().getFullYear()}
       </footer>
     </main>
   );

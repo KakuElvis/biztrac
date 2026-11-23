@@ -61,6 +61,9 @@ export function toBusiness(row) {
     getfund_rate: Number(row.getfund_rate ?? local.getfund_rate ?? 2.5),
     plan_tier: row.plan_tier || local.plan_tier || "free",
     plan_expires_at: row.plan_expires_at || local.plan_expires_at || null,
+    is_suspended: Boolean(row.is_suspended ?? local.is_suspended ?? false),
+    suspended_at: row.suspended_at || local.suspended_at || null,
+    suspension_reason: row.suspension_reason || local.suspension_reason || null,
   };
 }
 

@@ -8,31 +8,50 @@ import {
   Sparkles,
   Lock,
   LogOut,
+  Megaphone,
 } from "lucide-react";
 import { AdminOverview } from "./AdminOverview.jsx";
 import { AdminBusinesses } from "./AdminBusinesses.jsx";
 import { AdminAuditLogs } from "./AdminAuditLogs.jsx";
-import { checkIsSuperAdmin, getAdminDashboardStats } from "../../services/adminService.js";
+import { AdminAnnouncements } from "./AdminAnnouncements.jsx";
+import {
+  checkIsSuperAdmin,
+  getAdminDashboardStats,
+  getAdminRole,
+} from "../../services/adminService.js";
 import { showToast } from "../../lib/toast.js";
 
-export function AdminPortal({ onExitAdmin, onSignOut, hasStore = false }) {
-  const [activeTab, setActiveTab] = useState("overview"); // "overview" | "businesses" | "audit"
+export function AdminPortal({
+  onExitAdmin,
+  onSignOut,
+  onImpersonateStore,
+  hasStore = false,
+}) {
+  const [activeTab, setActiveTab] = useState("overview"); // "overview" | "businesses" | "announcements" | "audit"
   const [isSuperAdmin, setIsSuperAdmin] = useState(null);
+  const [adminRole, setAdminRole] = useState("none");
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [portalError, setPortalError] = useState("");
 
   const loadPortalData = useCallback(async () => {
     try {
       setLoading(true);
+      setPortalError("");
       const isAuthorized = await checkIsSuperAdmin();
       setIsSuperAdmin(isAuthorized);
 
       if (isAuthorized) {
-        const statsData = await getAdminDashboardStats();
+        const [statsData, roleData] = await Promise.all([
+          getAdminDashboardStats(),
+          getAdminRole(),
+        ]);
         setStats(statsData);
+        setAdminRole(roleData || "none");
       }
     } catch (err) {
       console.error("[AdminPortal] Initialization error:", err);
+      setPortalError(err.message || "Could not verify admin access or load portal data.");
       showToast(err.message || "Failed to initialize Admin Portal", { type: "error" });
     } finally {
       setLoading(false);
@@ -52,18 +71,26 @@ export function AdminPortal({ onExitAdmin, onSignOut, hasStore = false }) {
     );
   }
 
-  if (isSuperAdmin === false) {
+  if (isSuperAdmin === false || adminRole === "none") {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
         <div className="h-16 w-16 bg-rose-100 text-rose-600 rounded-3xl grid place-items-center mb-4 shadow-sm">
           <Lock className="h-8 w-8" />
         </div>
-        <h2 className="text-2xl font-black text-ink mb-1">Access Restricted</h2>
+        <h2 className="text-2xl font-black text-ink mb-1">
+          {isSuperAdmin ? "Admin Role Could Not Be Verified" : "Access Restricted"}
+        </h2>
         <p className="text-sm text-slate-500 max-w-md mb-6 font-medium">
-          Your account is not registered in the platform super-admin whitelist. Regular store owners
-          and cashiers cannot access this area.
+          {isSuperAdmin
+            ? portalError || "The admin role service did not return a valid role. Retry after checking the connection."
+            : "Your account is not registered in the platform admin directory. Regular store owners and cashiers cannot access this area."}
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
+          {isSuperAdmin ? (
+            <button type="button" onClick={loadPortalData} className="px-5 py-2.5 rounded-xl bg-purple-700 text-white font-bold text-xs">
+              Retry verification
+            </button>
+          ) : null}
           {onExitAdmin ? (
             <button
               type="button"
@@ -98,9 +125,9 @@ export function AdminPortal({ onExitAdmin, onSignOut, hasStore = false }) {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-black text-ink tracking-tight">BizTrac Super Admin</h1>
+                <h1 className="text-base font-black text-ink tracking-tight">BizPurse Super Admin</h1>
                 <span className="bg-purple-100 text-purple-800 border border-purple-200 text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
-                  Platform Core
+                  {adminRole.replace("_", " ")}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 font-medium">Tenant Directory & Billing Controls</p>
@@ -136,6 +163,7 @@ export function AdminPortal({ onExitAdmin, onSignOut, hasStore = false }) {
           {[
             { id: "overview", label: "Executive Overview", icon: BarChart3 },
             { id: "businesses", label: "Tenant Directory", icon: Building2 },
+            ...(adminRole === "super_admin" ? [{ id: "announcements", label: "Broadcasts", icon: Megaphone }] : []),
             { id: "audit", label: "Audit Timeline", icon: History },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -164,7 +192,10 @@ export function AdminPortal({ onExitAdmin, onSignOut, hasStore = false }) {
         {activeTab === "overview" && (
           <AdminOverview stats={stats} onNavigateTab={setActiveTab} />
         )}
-        {activeTab === "businesses" && <AdminBusinesses />}
+        {activeTab === "businesses" && (
+          <AdminBusinesses onImpersonateStore={onImpersonateStore} adminRole={adminRole} />
+        )}
+        {activeTab === "announcements" && adminRole === "super_admin" && <AdminAnnouncements />}
         {activeTab === "audit" && <AdminAuditLogs />}
       </main>
     </div>
