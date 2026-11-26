@@ -161,6 +161,23 @@ describe("BizPurse Super Admin Portal Service", () => {
       expect(csv).toContain("Store Name,Owner Name");
       expect(csv).toContain("PRO");
     });
+
+    it("sanitizes CSV formula injection attempts (CWE-1236)", () => {
+      const csv = exportBusinessesCsv([
+        {
+          name: "=cmd|' /C calc'!A0",
+          owner_name: "+SUM(1,2)",
+          phone: "@secret",
+          email: "-10",
+          location: "Accra",
+          plan_tier: "free",
+        },
+      ]);
+      expect(csv).toContain("'=cmd");
+      expect(csv).toContain("'+SUM");
+      expect(csv).toContain("'@secret");
+      expect(csv).toContain("'-10");
+    });
   });
 
   describe("getAdminRole()", () => {

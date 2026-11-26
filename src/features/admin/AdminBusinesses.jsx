@@ -19,6 +19,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { formatCurrency } from "../../lib/formatters.js";
+import { AdminBusinessInspection } from "./AdminBusinessInspection.jsx";
 import {
   listAdminBusinesses,
   overrideBusinessPlan,
@@ -28,7 +29,7 @@ import {
 } from "../../services/adminService.js";
 import { showToast } from "../../lib/toast.js";
 
-export function AdminBusinesses({ onImpersonateStore, adminRole = "super_admin" }) {
+export function AdminBusinesses({ adminRole = "super_admin" }) {
   const [businesses, setBusinesses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -56,6 +57,7 @@ export function AdminBusinesses({ onImpersonateStore, adminRole = "super_admin" 
   const [suspensionTarget, setSuspensionTarget] = useState(null);
   const [suspensionReason, setSuspensionReason] = useState("");
   const [suspensionSubmitting, setSuspensionSubmitting] = useState(false);
+  const [inspection, setInspection] = useState(null);
 
   const fetchBusinesses = useCallback(async () => {
     try {
@@ -232,15 +234,12 @@ export function AdminBusinesses({ onImpersonateStore, adminRole = "super_admin" 
     }
   };
 
-  const handleImpersonate = async (biz) => {
+  const handleInspect = async (biz) => {
     try {
       const res = await impersonateBusiness(biz.id);
-      if (res?.success) {
-        showToast(`Entering inspection mode for "${biz.name}"`, { type: "info" });
-        if (onImpersonateStore) {
-          onImpersonateStore(biz);
-        }
-      }
+      if (!res?.success || !res.business) throw new Error("Store inspection data was not returned.");
+      setInspection(res);
+      showToast(`Loaded read-only inspection for "${biz.name}"`, { type: "info" });
     } catch (err) {
       console.error("[AdminBusinesses] Impersonate error:", err);
       showToast(err.message || "Failed to inspect store", { type: "error" });
@@ -381,10 +380,10 @@ export function AdminBusinesses({ onImpersonateStore, adminRole = "super_admin" 
                   </div>
 
                   <div className="flex items-center gap-2 pt-1">
-                    {onImpersonateStore && adminRole !== "billing" && (
+                    {adminRole !== "billing" && (
                       <button
                         type="button"
-                        onClick={() => handleImpersonate(biz)}
+                        onClick={() => handleInspect(biz)}
                         className="flex-1 inline-flex items-center justify-center gap-1 py-2 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 font-bold text-xs shadow-2xs active:scale-95"
                       >
                         <Eye className="h-3.5 w-3.5" />
@@ -560,10 +559,10 @@ export function AdminBusinesses({ onImpersonateStore, adminRole = "super_admin" 
                       <td className="py-3.5 px-4 text-center">
                         <div className="inline-flex items-center gap-1.5">
                           {/* Impersonate / Inspect Trigger */}
-                          {onImpersonateStore && adminRole !== "billing" && (
+                    {adminRole !== "billing" && (
                             <button
                               type="button"
-                              onClick={() => handleImpersonate(biz)}
+                              onClick={() => handleInspect(biz)}
                               title="Inspect this store in read-only administrator mode"
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-indigo-200 hover:border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold transition shadow-2xs"
                             >
@@ -927,6 +926,10 @@ export function AdminBusinesses({ onImpersonateStore, adminRole = "super_admin" 
             </form>
           </div>
         </div>
+      )}
+
+      {inspection && (
+        <AdminBusinessInspection inspection={inspection} onClose={() => setInspection(null)} />
       )}
     </div>
   );

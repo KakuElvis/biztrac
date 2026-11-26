@@ -248,6 +248,7 @@ export function exportBusinessesCsv(businesses = []) {
 
   const escapeCsv = (val) => {
     let str = String(val ?? "");
+    // eslint-disable-next-line no-control-regex
     if (/^[\s\u0000-\u001f]*[=+@-]/.test(str)) str = `'${str}`;
     return `"${str.replace(/"/g, '""')}"`;
   };
@@ -307,7 +308,7 @@ export async function getAdminRole() {
 }
 
 /**
- * Triggers admin store inspection (impersonation) for troubleshooting.
+ * Fetches a read-only store snapshot and records the inspection in the audit log.
  */
 export async function impersonateBusiness(businessId) {
   if (!businessId) throw new Error("Business ID is required.");
@@ -429,6 +430,7 @@ export function exportAuditLogsCsv(logs = []) {
 
   const escapeCsv = (val) => {
     let str = String(val ?? "");
+    // eslint-disable-next-line no-control-regex
     if (/^[\s\u0000-\u001f]*[=+@-]/.test(str)) str = `'${str}`;
     return `"${str.replace(/"/g, '""')}"`;
   };

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, Suspense, lazy } from "react";
-import { Lock, Eye, Megaphone, X } from "lucide-react";
+import { Lock, Megaphone, X } from "lucide-react";
 import { AppLogo } from "./components/common/AppLogo.jsx";
 import { AppShell } from "./components/layout/AppShell.jsx";
 import { ErrorBoundary } from "./components/common/ErrorBoundary.jsx";
@@ -95,10 +95,6 @@ export default function App() {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const isCashier = Boolean(session && permissions?.isCashier && !isSuperAdmin && workspace?.business);
 
-  // Merchant Impersonation state
-  const [impersonatedBusiness, setImpersonatedBusiness] = useState(null);
-  const originalWorkspaceRef = useRef(null);
-
   // System Broadcast Announcements
   const [announcements, setAnnouncements] = useState([]);
 
@@ -115,19 +111,6 @@ export default function App() {
       isMounted = false;
     };
   }, [session, isSuperAdmin]);
-
-  const handleExitImpersonation = () => {
-    setWorkspace(originalWorkspaceRef.current || null);
-    setImpersonatedBusiness(null);
-    setActiveScreen("admin");
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.pathname = "/admin";
-      url.searchParams.delete("screen");
-      window.history.replaceState({ screen: "admin" }, "", url.toString());
-    }
-    showToast("Exited store inspection mode", { type: "info" });
-  };
 
   useEffect(() => {
     let isMounted = true;
@@ -373,8 +356,6 @@ export default function App() {
     resetCustomers();
     resetExpenses();
     resetAnalytics();
-    setImpersonatedBusiness(null);
-    originalWorkspaceRef.current = null;
     handleNavigate("dashboard", { replace: true });
   }
 
@@ -390,11 +371,6 @@ export default function App() {
   };
 
   const handleCompleteSale = async ({ customer, lines, paymentType, amountPaid, dueDate, notes, clientSaleId, queuedBusinessId }) => {
-    if (impersonatedBusiness) {
-      showToast("Sales recording is disabled in Administrator Inspection Mode (Read-Only).", { type: "info" });
-      return null;
-    }
-
     if (queuedBusinessId && queuedBusinessId !== businessId) {
       throw new Error("This offline sale belongs to a different business. Switch to that business to sync it.");
     }
@@ -554,18 +530,6 @@ export default function App() {
             currentUser={session?.user}
             hasStore={Boolean(workspace?.business)}
             onExitAdmin={() => handleNavigate("dashboard")}
-            onImpersonateStore={(targetBiz) => {
-              originalWorkspaceRef.current = workspace;
-              setImpersonatedBusiness(targetBiz);
-              setWorkspace({ business: targetBiz, role: "owner" });
-              setActiveScreen("dashboard");
-              if (typeof window !== "undefined") {
-                const url = new URL(window.location.href);
-                url.pathname = "/";
-                url.searchParams.set("screen", "dashboard");
-                window.history.pushState({ screen: "dashboard" }, "", url.toString());
-              }
-            }}
             onSignOut={() => {
               authSignOut(() => {
                 setActiveScreen("admin");
@@ -614,25 +578,6 @@ export default function App() {
 
   return (
     <>
-      {/* Platform Admin Store Inspection Banner */}
-      {impersonatedBusiness && (
-        <aside className="sticky top-0 z-50 bg-amber-500 text-slate-950 px-4 py-2.5 shadow-md flex items-center justify-between text-xs font-bold">
-          <div className="flex items-center gap-2">
-            <Eye className="h-4 w-4 shrink-0 text-slate-950" />
-            <span>
-              Store Inspection Mode: <strong>{impersonatedBusiness.name}</strong> (Viewing as Administrator)
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={handleExitImpersonation}
-            className="bg-slate-950 hover:bg-black text-white px-3 py-1 rounded-xl text-xs font-bold transition active:scale-95 shadow-xs"
-          >
-            Exit to Admin Portal
-          </button>
-        </aside>
-      )}
-
       {/* Merchant System Announcements Banner */}
       {announcements.map((ann) => (
         <div
@@ -681,17 +626,7 @@ export default function App() {
       isSyncing={isSyncing}
       onTriggerSync={triggerSync}
       pwaState={pwaState}
-      permissions={impersonatedBusiness ? {
-        ...permissions,
-        canManageCategories: false,
-        canForgiveDebt: false,
-        canManageSettings: false,
-        canManageStaff: false,
-        canRestock: false,
-        canCreateProduct: false,
-        canEditProduct: false,
-        canViewFinancialReports: false,
-      } : permissions}
+      permissions={permissions}
       previewRole={previewRole}
       onSetPreviewRole={setPreviewRole}
       plan={plan}
@@ -710,35 +645,23 @@ export default function App() {
             <Screen
           business={business}
           plan={plan}
-          onOpenUpgradeModal={impersonatedBusiness
-            ? () => showToast("Changes are disabled in read-only inspection mode.", { type: "info" })
-            : () => setIsUpgradeModalOpen(true)}
+          onOpenUpgradeModal={() => setIsUpgradeModalOpen(true)}
           onExitAdmin={() => handleNavigate("dashboard")}
           currentUser={session?.user}
-          permissions={impersonatedBusiness ? {
-            ...permissions,
-            canManageCategories: false,
-            canForgiveDebt: false,
-            canManageSettings: false,
-            canManageStaff: false,
-            canRestock: false,
-            canCreateProduct: false,
-            canEditProduct: false,
-            canViewFinancialReports: false,
-          } : permissions}
+          permissions={permissions}
           previewRole={previewRole}
           onSetPreviewRole={setPreviewRole}
-          canDeleteProducts={impersonatedBusiness ? false : permissions.canDeleteProducts}
-          canManageCategories={!impersonatedBusiness && permissions.canManageCategories}
-          canForgiveDebt={!impersonatedBusiness && permissions.canForgiveDebt}
+          canDeleteProducts={permissions.canDeleteProducts}
+          canManageCategories={permissions.canManageCategories}
+          canForgiveDebt={permissions.canForgiveDebt}
           canViewProfit={permissions.canViewProfit}
           canViewCostPrice={permissions.canViewCostPrice}
-          canManageSettings={!impersonatedBusiness && permissions.canManageSettings}
-          canManageStaff={!impersonatedBusiness && permissions.canManageStaff}
-          canRestock={!impersonatedBusiness && permissions.canRestock}
-          canCreateProduct={!impersonatedBusiness && permissions.canCreateProduct}
-          canEditProduct={!impersonatedBusiness && permissions.canEditProduct}
-          canViewFinancialReports={!impersonatedBusiness && permissions.canViewFinancialReports}
+          canManageSettings={permissions.canManageSettings}
+          canManageStaff={permissions.canManageStaff}
+          canRestock={permissions.canRestock}
+          canCreateProduct={permissions.canCreateProduct}
+          canEditProduct={permissions.canEditProduct}
+          canViewFinancialReports={permissions.canViewFinancialReports}
           isCashier={permissions.isCashier}
           categories={categories}
           categoriesError={categoriesError}
@@ -746,19 +669,19 @@ export default function App() {
           customers={customers}
           customersError={customersError}
           customersLoading={customersLoading}
-          onForgiveDebt={impersonatedBusiness ? () => showToast("Changes are disabled in read-only inspection mode.", { type: "info" }) : handleForgiveDebt}
+          onForgiveDebt={handleForgiveDebt}
           dashboardError={dashboardError}
           dashboardLoading={dashboardLoading}
           dashboardSummary={dashboardSummary}
           expenses={expenses}
           expensesError={expensesError}
           expensesLoading={expensesLoading}
-          onCreateExpense={impersonatedBusiness ? () => showToast("Changes are disabled in read-only inspection mode.", { type: "info" }) : handleCreateExpense}
-          onCreateProduct={impersonatedBusiness ? () => showToast("Changes are disabled in read-only inspection mode.", { type: "info" }) : handleCreateProduct}
-          onDeleteProduct={impersonatedBusiness ? () => showToast("Product deletion disabled in Administrator Inspection Mode.", { type: "info" }) : handleDeleteProduct}
+          onCreateExpense={handleCreateExpense}
+          onCreateProduct={handleCreateProduct}
+          onDeleteProduct={handleDeleteProduct}
           onCompleteSale={handleCompleteSale}
-          onCreateCategory={impersonatedBusiness ? () => showToast("Changes are disabled in read-only inspection mode.", { type: "info" }) : handleCreateCategory}
-          onUpdateBusiness={impersonatedBusiness ? () => showToast("Changes are disabled in read-only inspection mode.", { type: "info" }) : handleUpdateBusinessProfile}
+          onCreateCategory={handleCreateCategory}
+          onUpdateBusiness={handleUpdateBusinessProfile}
           products={activeScreen === "sales" ? (catalogProducts && catalogProducts.length ? catalogProducts : products) : products}
           productsError={productsError}
           productsLoading={activeScreen === "sales" ? (catalogLoading && !catalogProducts.length) : productsLoading}
@@ -773,14 +696,14 @@ export default function App() {
           reportsError={reportsError}
           reportsLoading={reportsLoading}
           setProducts={setProducts}
-          onUpdateProduct={impersonatedBusiness ? () => showToast("Changes are disabled in read-only inspection mode.", { type: "info" }) : handleUpdateProduct}
-          onRestockProduct={impersonatedBusiness ? () => showToast("Changes are disabled in read-only inspection mode.", { type: "info" }) : handleRestockProduct}
+          onUpdateProduct={handleUpdateProduct}
+          onRestockProduct={handleRestockProduct}
           onFetchProductRestocks={fetchProductRestocks}
           onFetchProductStockTimeline={fetchProductStockTimeline}
-          onUpdateCustomer={impersonatedBusiness ? () => showToast("Changes are disabled in read-only inspection mode.", { type: "info" }) : handleUpdateCustomer}
+          onUpdateCustomer={handleUpdateCustomer}
           onFetchCustomerDetails={fetchCustomerDetails}
-          onCreateCustomer={impersonatedBusiness ? () => showToast("Changes are disabled in read-only inspection mode.", { type: "info" }) : handleCreateCustomer}
-          onPayDebt={impersonatedBusiness ? () => showToast("Changes are disabled in read-only inspection mode.", { type: "info" }) : handlePayDebt}
+          onCreateCustomer={handleCreateCustomer}
+          onPayDebt={handlePayDebt}
           onNavigate={handleNavigate}
           onSignOut={handleSignOut}
           queuedCount={queuedCount}

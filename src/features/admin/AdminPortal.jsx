@@ -24,7 +24,6 @@ import { showToast } from "../../lib/toast.js";
 export function AdminPortal({
   onExitAdmin,
   onSignOut,
-  onImpersonateStore,
   hasStore = false,
 }) {
   const [activeTab, setActiveTab] = useState("overview"); // "overview" | "businesses" | "announcements" | "audit"
@@ -193,7 +192,7 @@ export function AdminPortal({
           <AdminOverview stats={stats} onNavigateTab={setActiveTab} />
         )}
         {activeTab === "businesses" && (
-          <AdminBusinesses onImpersonateStore={onImpersonateStore} adminRole={adminRole} />
+          <AdminBusinesses adminRole={adminRole} />
         )}
         {activeTab === "announcements" && adminRole === "super_admin" && <AdminAnnouncements />}
         {activeTab === "audit" && <AdminAuditLogs />}
