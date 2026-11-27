@@ -21,17 +21,34 @@ create table if not exists public.product_restocks (
 alter table public.product_restocks enable row level security;
 
 -- RLS Policies
-create policy "Members can view product restocks"
-  on public.product_restocks
-  for select
-  using (
-    exists (
-      select 1 from public.business_members
-      where business_members.business_id = product_restocks.business_id
-        and business_members.user_id = auth.uid()
-    )
-  );
+-- create policy "Members can view product restocks"
+--   on public.product_restocks
+--   for select
+--   using (
+--     exists (
+--       select 1 from public.business_members
+--       where business_members.business_id = product_restocks.business_id
+--         and business_members.user_id = auth.uid()
+--     )
+--   );
 
+DROP POLICY IF EXISTS "Members can view product restocks"
+ON public.product_restocks;
+
+CREATE POLICY "Members can view product restocks"
+ON public.product_restocks
+FOR SELECT
+USING (
+  EXISTS (
+    SELECT 1
+    FROM public.business_members
+    WHERE business_members.business_id = product_restocks.business_id
+      AND business_members.user_id = auth.uid()
+  )
+);
+
+DROP POLICY IF EXISTS "Members can create product restocks"
+ON public.product_restocks;
 create policy "Members can create product restocks"
   on public.product_restocks
   for insert
